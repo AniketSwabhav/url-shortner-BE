@@ -64,5 +64,3 @@ model.Base
 amount float32
 UserId uuid.UUID
 }
-
-
