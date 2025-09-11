@@ -1,0 +1,68 @@
+package user
+
+
+Creation: Users can create short URLs only for functional long URLs. 
+• Validity: URLs have a validity limit (X visits) for free short URLs (X determined by admin). 
+• Renewal: Users can renew expired short URLs for a fixed fee (Rs. Y) for N number of visits (Y 
+and N set by admin). 
+• History: Users can view a comprehensive list of all previously created short URLs. 
+• Limits: Users can create Z free short URLs (Z set by admin) and have the option to purchase 
+additional URLs for Rs. M (M set by admin).
+
+type Base struct {
+ID        uuid.UUID  `gorm:"type:varchar(36);primary_key" json:"id" example:"cfe25758-f5fe-48f0-874d-e72cd4edd9b9"`
+CreatedBy uuid.UUID  `gorm:"type:varchar(36)" json:"-"`
+CreatedAt time.Time  `json:"-"`
+UpdatedBy uuid.UUID  `gorm:"type:varchar(36)" json:"-"`
+UpdatedAt time.Time  `json:"-"`
+DeletedBy uuid.UUID  `gorm:"type:varchar(36)" json:"-"`
+DeletedAt *time.Time `sql:"index" json:"-"`
+}
+
+type User struct {
+model.Base
+FirstName    string                 `json:"firstName" example:"Ravi" gorm:"type:varchar(500)"`
+LastName     string                 `json:"lastName" example:"Sharma" gorm:"type:varchar(50)"`
+PhoneNo      string                 `sql:"index" json:"phoneNo" example:"9700795509" gorm:"type:varchar(15)"`
+IsAdmin      *bool                  `json:"isAdmin" gorm:"type:tinyint(1);default:false"`
+IsActive     *bool                  `json:"isActive" gorm:"type:tinyint(1);default:true"`
+Wallet         float32        `json:"wallet" gorm:"type:float"`
+UrlCount      int                       `json:"urlCount" gorm:"type:int"`
+Credentials  *credential.Credential `json:"credential"`
+Subscription   *subscription.Subscription `json:"subscription" gorm:"foreignKey:SubscriptionID"`
+Url            []url.Url      `json:"url" gorm:"foreignKey:UrlID"`
+Transactions   []*transaction.Trasaction `json:"transactions" gorm:"foreignKey:TransactionID"`
+}
+
+type Credential struct {
+model.Base
+Email    string    `json:"email" gorm:"unique;not null;type:varchar(36)"`
+Password string    `json:"password" gorm:"not null;type:varchar(255)"`
+UserID   uuid.UUID `json:"userId" gorm:"not null;type:varchar(36)"`
+}
+
+type Url struct {
+model.Base
+LongUrl  string    `json:"longUrl" gorm:"not null;type:text"`
+ShortUrl string    `json:"shortUrl" gorm:"not null;unique;type:varchar(5)"`
+UserID   uuid.UUID `json:"userId" gorm:"foreignkey:ID;type:char(36)"`
+Visits   int       `json:"visits" gorm:"not null;type:int;default:0"` 
+}
+
+type Subscription struct {
+model.Base
+userId uuid.UUID
+FreeVisits int 
+FreeUrlLimit int
+PerUrlPrice float32
+RequiredVisits int 
+TotalRenewCost float32
+}
+
+type Transaction struct {
+model.Base
+amount float32
+UserId uuid.UUID
+}
+
+
