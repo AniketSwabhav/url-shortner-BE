@@ -21,4 +21,4 @@ type User struct {
 	Subscription []*subscription.Subscription `json:"Subscription" gorm:"foreignKey:subscriptionID"`
 }
 
-//add DTO for get api
+//make a DTO  for this strut for get api
