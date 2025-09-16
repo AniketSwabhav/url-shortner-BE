@@ -1,6 +1,8 @@
 package user
 
 import (
+	"url-shortner-be/components/errors"
+	"url-shortner-be/components/util"
 	"url-shortner-be/model/credential"
 	model "url-shortner-be/model/general"
 	"url-shortner-be/model/subscription"
@@ -21,4 +23,17 @@ type User struct {
 	Subscription []*subscription.Subscription `json:"Subscription" gorm:"foreignKey:subscriptionID"`
 }
 
-//make a DTO  for this strut for get api
+// make a DTO  for this strut for get api
+func (user *User) Validate() error {
+
+	if util.IsEmpty(user.FirstName) || !util.ValidateString(user.FirstName) {
+		return errors.NewValidationError("User FirstName must be specified and must have characters only")
+	}
+	if util.IsEmpty(user.LastName) || !util.ValidateString(user.LastName) {
+		return errors.NewValidationError("User LastName must be specified and must have characters only")
+	}
+	if util.IsEmpty(user.PhoneNo) || !util.ValidateContact(user.PhoneNo) {
+		return errors.NewValidationError("User Contact must be specified and have 10 digits")
+	}
+	return nil
+}
