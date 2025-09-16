@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"url-shortner-be/components/errors"
+
 	"github.com/jinzhu/gorm"
 	uuid "github.com/satori/go.uuid"
 )
@@ -164,25 +166,32 @@ func Filter(condition string, args ...interface{}) QueryProcessor {
 	}
 }
 
-// func DoesEmailExist(db *gorm.DB, email string, out interface{}, queryProcessors ...QueryProcessor) (bool, error) {
-// 	if email == "" {
-// 		return false, errors.NewNotFoundError("email not present")
-// 	}
-// 	count := 0
-// 	// Below comment would make the tenant check before all query processor (Uncomment only if needed in future)
-// 	// queryProcessors = append([]QueryProcessor{Filter("tenant_id = ?", tenantID)},queryProcessors... )
-// 	db, err := executeQueryProcessors(db, out, queryProcessors...)
-// 	if err != nil {
-// 		return false, err
-// 	}
-// 	if err := db.Debug().Model(out).Where("email = ?", email).Count(&count).Error; err != nil {
-// 		return false, err
-// 	}
-// 	if count > 0 {
-// 		return true, nil
-// 	}
-// 	return false, nil
-// }
+func Order(column string) QueryProcessor {
+	return func(db *gorm.DB, out interface{}) (*gorm.DB, error) {
+		db = db.Order(column) //db.Order("created_at desc").First(out).Error
+		return db, nil
+	}
+}
+
+func DoesEmailExist(db *gorm.DB, email string, out interface{}, queryProcessors ...QueryProcessor) (bool, error) {
+	if email == "" {
+		return false, errors.NewNotFoundError("email not present")
+	}
+	count := 0
+	// Below comment would make the tenant check before all query processor (Uncomment only if needed in future)
+	// queryProcessors = append([]QueryProcessor{Filter("tenant_id = ?", tenantID)},queryProcessors... )
+	db, err := executeQueryProcessors(db, out, queryProcessors...)
+	if err != nil {
+		return false, err
+	}
+	if err := db.Debug().Model(out).Where("email = ?", email).Count(&count).Error; err != nil {
+		return false, err
+	}
+	if count > 0 {
+		return true, nil
+	}
+	return false, nil
+}
 
 // func DoesRecordExistForUser(db *gorm.DB, userID uuid.UUID, out interface{}, queryProcessors ...QueryProcessor) (bool, error) {
 // 	if userID == uuid.Nil {

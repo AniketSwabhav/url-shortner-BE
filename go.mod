@@ -3,12 +3,14 @@ module url-shortner-be
 go 1.24.2
 
 require (
+	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/gorilla/handlers v1.5.2
 	github.com/gorilla/mux v1.8.1
 	github.com/jinzhu/gorm v1.9.16
 	github.com/satori/go.uuid v1.2.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/viper v1.21.0
+	golang.org/x/crypto v0.0.0-20191205180655-e7c4368fe9dd
 )
 
 require (
