@@ -98,7 +98,7 @@ func (a *App) Init() {
 func (a *App) initializeRouter() {
 	a.Log.Print("Initializing " + a.Name + " Route")
 	a.Router = mux.NewRouter().StrictSlash(true)
-	a.Router = a.Router.PathPrefix("/api/v1/banking-app").Subrouter()
+	a.Router = a.Router.PathPrefix("/api/v1/url-shortner").Subrouter()
 }
 
 func (a *App) initializeServer() {
