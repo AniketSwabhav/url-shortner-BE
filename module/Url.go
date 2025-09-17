@@ -12,9 +12,9 @@ func registerUrlRoutes(appObj *app.App, repository repository.Repository) {
 	defer appObj.WG.Done()
 	urlService := urlService.NewUrlService(appObj.DB, repository)
 
-	userController := controller.NewUrlController(urlService, appObj.Log)
+	urlController := controller.NewUrlController(urlService, appObj.Log)
 
 	appObj.RegisterControllerRoutes([]app.Controller{
-		userController,
+		urlController,
 	})
 }

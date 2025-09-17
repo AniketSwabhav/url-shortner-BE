@@ -6,6 +6,7 @@ import (
 	"url-shortner-be/model/credential"
 	model "url-shortner-be/model/general"
 	"url-shortner-be/model/subscription"
+	"url-shortner-be/model/transaction"
 	"url-shortner-be/model/url"
 )
 
@@ -21,6 +22,7 @@ type User struct {
 	Credentials  *credential.Credential       `json:"credential"`
 	Url          []url.Url                    `json:"url" gorm:"foreignKey:urlID"`
 	Subscription []*subscription.Subscription `json:"Subscription" gorm:"foreignKey:subscriptionID"`
+	Transactions []*transaction.Transaction   `json:"transactions" gorm:"foreignKey:ID"`
 }
 
 // make a DTO  for this strut for get api

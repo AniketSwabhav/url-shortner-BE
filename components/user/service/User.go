@@ -139,6 +139,13 @@ func (service *UserService) CreateUser(newUser *user.User) error {
 		return err
 	}
 
+	// subscriptionPlan := &subscription.Subscription{}
+	// if err = service.repository.GetRecord(uow, &subscriptionPlan, repository.Order("created_at desc")); err != nil {
+	// 	uow.RollBack()
+	// 	return err
+	// }
+	// newUser.UrlCount = subscriptionPlan.FreeUrlLimit
+
 	if err := newUser.Credentials.Validate(); err != nil {
 		return err
 	}

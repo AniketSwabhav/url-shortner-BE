@@ -102,13 +102,13 @@ func (controller *UserController) registerAdmin(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	newAdmin.CreatedBy, err = security.ExtractUserIDFromToken(r)
-	if err != nil {
-		controller.log.Error(err.Error())
-		web.RespondError(w, err)
-		return
-	}
-	newAdmin.Credentials.CreatedBy = newAdmin.CreatedBy
+	// newAdmin.CreatedBy, err = security.ExtractUserIDFromToken(r)
+	// if err != nil {
+	// 	controller.log.Error(err.Error())
+	// 	web.RespondError(w, err)
+	// 	return
+	// }
+	// newAdmin.Credentials.CreatedBy = newAdmin.CreatedBy
 
 	err = controller.UserService.CreateAdmin(&newAdmin)
 	if err != nil {

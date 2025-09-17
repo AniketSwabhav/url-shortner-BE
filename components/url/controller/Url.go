@@ -62,6 +62,7 @@ func (controller *UrlController) registerUrl(w http.ResponseWriter, r *http.Requ
 		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
 		return
 	}
+	newUrl.CreatedBy = userIdFromURL
 
 	err = controller.UrlService.CreateUrl(userIdFromURL, newUrl)
 	if err != nil {
@@ -69,7 +70,6 @@ func (controller *UrlController) registerUrl(w http.ResponseWriter, r *http.Requ
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
 	web.RespondJSON(w, http.StatusCreated, newUrl)
 }
 

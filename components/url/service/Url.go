@@ -1,7 +1,6 @@
 package service
 
 import (
-	"url-shortner-be/components/errors"
 	"url-shortner-be/model/subscription"
 	"url-shortner-be/model/url"
 	"url-shortner-be/model/user"
@@ -40,11 +39,11 @@ func (service *UrlService) CreateUrl(userId uuid.UUID, newUrl *url.Url) error {
 	}
 
 	newUrl.UserID = foundUser.ID
-	newUrl.Visits = latestPriceRecord.FreeVisits
 
-	if foundUser.UrlCount == 0 {
-		return errors.NewDatabaseError("maximum url creation limit is reached, purchase more for creating new url")
-	}
+	// newUrl.Visits = latestPriceRecord.FreeVisits
+	// if foundUser.UrlCount == 0 {
+	// 	return errors.NewDatabaseError("maximum url creation limit is reached, purchase more for creating new url")
+	// }
 
 	for {
 
