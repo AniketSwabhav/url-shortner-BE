@@ -2,6 +2,7 @@ package controller
 
 import (
 	"net/http"
+	"strconv"
 	"url-shortner-be/components/errors"
 	"url-shortner-be/components/log"
 	"url-shortner-be/components/security"
@@ -14,6 +15,7 @@ import (
 	"github.com/gorilla/mux"
 )
 
+// brijesh
 type UserController struct {
 	log         log.Logger
 	UserService *userService.UserService
@@ -37,61 +39,16 @@ func (userController *UserController) RegisterRoutes(router *mux.Router) {
 	unguardedRouter.HandleFunc("/login", userController.login).Methods(http.MethodPost)
 	unguardedRouter.HandleFunc("/register-user", userController.registerUser).Methods(http.MethodPost)
 	unguardedRouter.HandleFunc("/register-admin", userController.registerAdmin).Methods(http.MethodPost)
+	unguardedRouter.HandleFunc("/{id}", userController.GetUserByID).Methods(http.MethodGet)
+	unguardedRouter.HandleFunc("/", userController.GetAllUsers).Methods(http.MethodGet)
+	unguardedRouter.HandleFunc("/{id}", userController.UpdateUser).Methods(http.MethodPut)
+	unguardedRouter.HandleFunc("/{id}", userController.deleteUserById).Methods(http.MethodDelete)
 
-	// router.HandleFunc("/register", userController.RegisterUser).Methods(http.MethodPost)
-	// router.HandleFunc("/register/admin", userController.RegisterAdmin).Methods(http.MethodPost)
-	// router.HandleFunc("/users", userController.GetAllUsers).Methods(http.MethodGet)
-	// router.HandleFunc("/users/{id}", userController.GetUserByID).Methods(http.MethodGet)
-	// router.HandleFunc("/users/{id}", userController.UpdateUser).Methods(http.MethodPut)
-	// router.HandleFunc("/users/{id}", userController.DeleteUser).Methods(http.MethodDelete)
+	unguardedRouter.HandleFunc("/{userId}/wallet/add", userController.AddAmountToWallet).Methods(http.MethodPost)
+	unguardedRouter.HandleFunc("/{userId}/wallet/withdraw", userController.WithdrawAmountFromWallet).Methods(http.MethodPost)
 
 	commonRouter.Use(security.MiddlewareUser)
 }
-
-// -------- Register User --------
-// func (uc *UserController) RegisterAdmin(w http.ResponseWriter, r *http.Request) {
-// 	var req userService.RegisterRequest
-// 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-// 		http.Error(w, "invalid request", http.StatusBadRequest)
-// 		return
-// 	}
-
-// 	isAdmin := true
-// 	isActive := true
-// 	req.IsAdmin = &isAdmin
-// 	req.IsActive = &isActive
-
-// 	user, err := uc.UserService.Register(req)
-// 	if err != nil {
-// 		http.Error(w, err.Error(), http.StatusBadRequest)
-// 		return
-// 	}
-
-// 	w.WriteHeader(http.StatusCreated)
-// 	json.NewEncoder(w).Encode(user)
-// }
-
-// func (uc *UserController) RegisterUser(w http.ResponseWriter, r *http.Request) {
-// 	var req userService.RegisterRequest
-// 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-// 		http.Error(w, "invalid request", http.StatusBadRequest)
-// 		return
-// 	}
-
-// 	isAdmin := false
-// 	isActive := true
-// 	req.IsAdmin = &isAdmin
-// 	req.IsActive = &isActive
-
-// 	user, err := uc.UserService.Register(req)
-// 	if err != nil {
-// 		http.Error(w, err.Error(), http.StatusBadRequest)
-// 		return
-// 	}
-
-// 	w.WriteHeader(http.StatusCreated)
-// 	json.NewEncoder(w).Encode(user)
-// }
 
 func (controller *UserController) registerAdmin(w http.ResponseWriter, r *http.Request) {
 	newAdmin := user.User{}
@@ -102,13 +59,13 @@ func (controller *UserController) registerAdmin(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// newAdmin.CreatedBy, err = security.ExtractUserIDFromToken(r)
-	// if err != nil {
-	// 	controller.log.Error(err.Error())
-	// 	web.RespondError(w, err)
-	// 	return
-	// }
-	// newAdmin.Credentials.CreatedBy = newAdmin.CreatedBy
+	newAdmin.CreatedBy, err = security.ExtractUserIDFromToken(r)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+	newAdmin.Credentials.CreatedBy = newAdmin.CreatedBy
 
 	err = controller.UserService.CreateAdmin(&newAdmin)
 	if err != nil {
@@ -176,99 +133,180 @@ func (controller *UserController) login(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-// -------- Get All --------
-// func (uc *UserController) GetAllUsers(w http.ResponseWriter, r *http.Request) {
-// 	users, err := uc.UserService.GetAllUsers()
-// 	if err != nil {
-// 		http.Error(w, err.Error(), http.StatusInternalServerError)
-// 		return
-// 	}
-// 	json.NewEncoder(w).Encode(users)
-// }
+func (controller *UserController) GetUserByID(w http.ResponseWriter, r *http.Request) {
+	var targetUser = &user.UserDTO{}
 
-// // -------- Get By ID --------
-// func (uc *UserController) GetUserByID(w http.ResponseWriter, r *http.Request) {
-// 	idStr := mux.Vars(r)["id"]
-// 	id, err := uuid.FromString(idStr)
-// 	if err != nil {
-// 		http.Error(w, "invalid user ID", http.StatusBadRequest)
-// 		return
-// 	}
+	parser := web.NewParser(r)
 
-// 	user, err := uc.UserService.GetUserByID(id)
-// 	if err != nil {
-// 		http.Error(w, err.Error(), http.StatusNotFound)
-// 		return
-// 	}
-// 	json.NewEncoder(w).Encode(user)
-// }
+	userIdFromURL, err := parser.GetUUID("id")
+	if err != nil {
+		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
+		return
+	}
+	targetUser.ID = userIdFromURL
 
-// // -------- Update --------
-// func (uc *UserController) UpdateUser(w http.ResponseWriter, r *http.Request) {
-// 	idStr := mux.Vars(r)["id"]
-// 	id, err := uuid.FromString(idStr)
-// 	if err != nil {
-// 		http.Error(w, "invalid user ID", http.StatusBadRequest)
-// 		return
-// 	}
+	err = controller.UserService.GetUserByID(targetUser)
+	if err != nil {
+		web.RespondError(w, err)
+		return
+	}
 
-// 	var u userService.RegisterRequest
-// 	if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
-// 		http.Error(w, "invalid request", http.StatusBadRequest)
-// 		return
-// 	}
+	web.RespondJSON(w, http.StatusOK, targetUser)
+}
 
-// 	existing, err := uc.UserService.GetUserByID(id)
-// 	if err != nil {
-// 		http.Error(w, "user not found", http.StatusNotFound)
-// 		return
-// 	}
+func (controller *UserController) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	var targetUser = &user.User{}
 
-// 	existing.FirstName = u.FirstName
-// 	existing.LastName = u.LastName
-// 	existing.PhoneNo = u.PhoneNo
-// 	existing.IsAdmin = u.IsAdmin
-// 	existing.IsActive = u.IsActive
+	parser := web.NewParser(r)
 
-// 	if err := uc.UserService.UpdateUser(existing, u.Email, u.Password); err != nil {
-// 		http.Error(w, err.Error(), http.StatusInternalServerError)
-// 		return
-// 	}
+	userIdFromURL, err := parser.GetUUID("id")
+	if err != nil {
+		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
+		return
+	}
+	targetUser.ID = userIdFromURL
 
-// 	json.NewEncoder(w).Encode(existing)
-// }
+	err = web.UnmarshalJSON(r, &targetUser)
+	if err != nil {
+		web.RespondError(w, errors.NewHTTPError("Unable to parse request body", http.StatusBadRequest))
+		return
+	}
 
-// // -------- Delete --------
-// func (uc *UserController) DeleteUser(w http.ResponseWriter, r *http.Request) {
-// 	idStr := mux.Vars(r)["id"]
-// 	id, err := uuid.FromString(idStr)
-// 	if err != nil {
-// 		http.Error(w, "invalid user ID", http.StatusBadRequest)
-// 		return
-// 	}
+	targetUser.UpdatedBy, err = security.ExtractUserIDFromToken(r)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
 
-// 	if err := uc.UserService.DeleteUser(id); err != nil {
-// 		http.Error(w, err.Error(), http.StatusInternalServerError)
-// 		return
-// 	}
+	err = controller.UserService.UpdateUser(targetUser)
+	if err != nil {
+		web.RespondError(w, err)
+		return
+	}
 
-// 	w.WriteHeader(http.StatusNoContent)
-// }
+	web.RespondJSON(w, http.StatusOK, map[string]string{
+		"message": "User updated successfully",
+	})
+}
 
-// // -------- Login --------
-// func (uc *UserController) Login(w http.ResponseWriter, r *http.Request) {
-// 	var req userService.LoginRequest
-// 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-// 		http.Error(w, "invalid request", http.StatusBadRequest)
-// 		return
-// 	}
+func (controller *UserController) GetAllUsers(w http.ResponseWriter, r *http.Request) {
+	allUsers := &[]user.UserDTO{}
+	var totalCount int
+	query := r.URL.Query()
 
-// 	resp, err := uc.UserService.Login(req)
-// 	if err != nil {
-// 		http.Error(w, err.Error(), http.StatusUnauthorized)
-// 		return
-// 	}
+	limitStr := query.Get("limit")
+	offsetStr := query.Get("offset")
 
-// 	w.WriteHeader(http.StatusOK)
-// 	json.NewEncoder(w).Encode(resp)
-// }
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 5
+	}
+
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
+		offset = 0
+	}
+
+	err = controller.UserService.GetAllUsers(allUsers, &totalCount, limit, offset)
+	if err != nil {
+		controller.log.Print(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+	web.RespondJSONWithXTotalCount(w, http.StatusOK, totalCount, allUsers)
+}
+
+func (controller *UserController) deleteUserById(w http.ResponseWriter, r *http.Request) {
+	parser := web.NewParser(r)
+
+	userID, err := parser.GetUUID("id")
+	if err != nil {
+		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
+		return
+	}
+
+	deletedBy, err := security.ExtractUserIDFromToken(r)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
+	err = controller.UserService.Delete(userID, deletedBy)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
+	web.RespondJSON(w, http.StatusOK, map[string]string{
+		"message": "User deleted successfully",
+	})
+}
+
+func (controller *UserController) AddAmountToWallet(w http.ResponseWriter, r *http.Request) {
+	parser := web.NewParser(r)
+
+	userId, err := parser.GetUUID("userId")
+	if err != nil {
+		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
+		return
+	}
+
+	var req user.User
+	err = web.UnmarshalJSON(r, &req)
+	if err != nil {
+		web.RespondError(w, errors.NewHTTPError("Unable to parse request body", http.StatusBadRequest))
+		return
+	}
+
+	if req.Wallet <= 0 {
+		web.RespondError(w, errors.NewValidationError("Amount must be greater than zero"))
+		return
+	}
+
+	err = controller.UserService.AddAmountToWalllet(userId, req.Wallet)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
+	web.RespondJSON(w, http.StatusOK, map[string]string{
+		"message": "Amount added successfully",
+	})
+}
+
+func (controller *UserController) WithdrawAmountFromWallet(w http.ResponseWriter, r *http.Request) {
+	parser := web.NewParser(r)
+
+	userId, err := parser.GetUUID("userId")
+	if err != nil {
+		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
+		return
+	}
+
+	var req user.User
+	err = web.UnmarshalJSON(r, &req)
+	if err != nil {
+		web.RespondError(w, errors.NewHTTPError("Unable to parse request body", http.StatusBadRequest))
+		return
+	}
+
+	if req.Wallet <= 0 {
+		web.RespondError(w, errors.NewValidationError("Amount must be greater than zero"))
+		return
+	}
+
+	err = controller.UserService.WithdrawAmountFromWallet(userId, req.Wallet)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
+	web.RespondJSON(w, http.StatusOK, map[string]string{
+		"message": "Amount withdrawn successfully",
+	})
+}

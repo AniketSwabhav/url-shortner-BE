@@ -10,6 +10,8 @@ import (
 	"url-shortner-be/model/user"
 	"url-shortner-be/module/repository"
 
+	uuid "github.com/satori/go.uuid"
+
 	"github.com/golang-jwt/jwt"
 	"github.com/jinzhu/gorm"
 	"golang.org/x/crypto/bcrypt"
@@ -29,72 +31,16 @@ func NewUserService(DB *gorm.DB, repo repository.Repository) *UserService {
 	}
 }
 
-// type RegisterRequest struct {
-// 	FirstName string `json:"firstName"`
-// 	LastName  string `json:"lastName"`
-// 	PhoneNo   string `json:"phoneNo"`
-// 	Email     string `json:"email"`
-// 	Password  string `json:"password"`
-// 	IsAdmin   *bool  `json:"isAdmin"`
-// 	IsActive  *bool  `json:"isActive"`
-// }
-
-// ---------------- Register ----------------
-// func (s *UserService) Register(req RegisterRequest) (*user.User, error) {
-// 	if req.Email == "" || req.Password == "" {
-// 		return nil, errors.InvalidCredentials()
-// 	}
-
-// 	hashedPwd, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-// 	if err != nil {
-// 		return nil, errors.InvalidCredentials()
-// 	}
-
-// 	uow := repository.NewUnitOfWork(s.db, false)
-// 	defer uow.RollBack()
-
-// 	newUser := &user.User{
-// 		FirstName: req.FirstName,
-// 		LastName:  req.LastName,
-// 		PhoneNo:   req.PhoneNo,
-// 		IsAdmin:   req.IsAdmin,
-// 		IsActive:  req.IsActive,
-// 		Wallet:    0,
-// 		UrlCount:  0,
-// 	}
-
-// 	if err := s.repository.Add(uow, newUser); err != nil {
-// 		return nil, err
-// 	}
-
-// 	cred := &credential.Credential{
-// 		Email:    req.Email,
-// 		Password: string(hashedPwd),
-// 		UserID:   newUser.ID,
-// 	}
-
-// 	if err := s.repository.Add(uow, cred); err != nil {
-// 		return nil, err
-// 	}
-
-// 	uow.Commit()
-// 	newUser.Credentials = cred
-// 	return newUser, nil
-// }
-
 func (service *UserService) CreateAdmin(newUser *user.User) error {
-
 	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
 
-	err := service.doesEmailExists(newUser.Credentials.Email)
-	if err != nil {
+	if err := service.doesEmailExists(newUser.Credentials.Email); err != nil {
 		return err
 	}
 
-	if err = newUser.Validate(); err != nil {
+	if err := newUser.Validate(); err != nil {
 		log.GetLogger().Error(err.Error())
-		uow.RollBack()
 		return err
 	}
 
@@ -111,11 +57,9 @@ func (service *UserService) CreateAdmin(newUser *user.User) error {
 	if err != nil {
 		return fmt.Errorf("failed to hash password: %w", err)
 	}
-
 	newUser.Credentials.Password = string(hashedPassword)
 
-	err = uow.DB.Create(newUser).Error
-	if err != nil {
+	if err := uow.DB.Create(newUser).Error; err != nil {
 		return errors.NewDatabaseError("Failed to create user")
 	}
 
@@ -124,27 +68,17 @@ func (service *UserService) CreateAdmin(newUser *user.User) error {
 }
 
 func (service *UserService) CreateUser(newUser *user.User) error {
-
 	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
 
-	err := service.doesEmailExists(newUser.Credentials.Email)
-	if err != nil {
+	if err := service.doesEmailExists(newUser.Credentials.Email); err != nil {
 		return err
 	}
 
-	if err = newUser.Validate(); err != nil {
+	if err := newUser.Validate(); err != nil {
 		log.GetLogger().Error(err.Error())
-		uow.RollBack()
 		return err
 	}
-
-	// subscriptionPlan := &subscription.Subscription{}
-	// if err = service.repository.GetRecord(uow, &subscriptionPlan, repository.Order("created_at desc")); err != nil {
-	// 	uow.RollBack()
-	// 	return err
-	// }
-	// newUser.UrlCount = subscriptionPlan.FreeUrlLimit
 
 	if err := newUser.Credentials.Validate(); err != nil {
 		return err
@@ -154,11 +88,9 @@ func (service *UserService) CreateUser(newUser *user.User) error {
 	if err != nil {
 		return fmt.Errorf("failed to hash password: %w", err)
 	}
-
 	newUser.Credentials.Password = string(hashedPassword)
 
-	err = uow.DB.Create(newUser).Error
-	if err != nil {
+	if err := uow.DB.Create(newUser).Error; err != nil {
 		return errors.NewDatabaseError("Failed to create user")
 	}
 
@@ -167,12 +99,11 @@ func (service *UserService) CreateUser(newUser *user.User) error {
 }
 
 func (service *UserService) Login(userCredential *credential.Credential, claim *security.Claims) error {
-
 	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
 
 	exists, err := repository.DoesEmailExist(service.db, userCredential.Email, credential.Credential{},
-		repository.Filter("`email` = ?", userCredential.Email))
+		repository.Filter("email = ?", userCredential.Email))
 	if err != nil {
 		return errors.NewDatabaseError("Error checking if email exists")
 	}
@@ -180,22 +111,17 @@ func (service *UserService) Login(userCredential *credential.Credential, claim *
 		return errors.NewNotFoundError("Email not found")
 	}
 
-	foundCredential := credential.Credential{}
-	err = uow.DB.Where("email = ?", userCredential.Email).First(&foundCredential).Error
-	if err != nil {
+	var foundCredential credential.Credential
+	if err := uow.DB.Where("email = ?", userCredential.Email).First(&foundCredential).Error; err != nil {
 		return errors.NewDatabaseError("Could not retrieve credentials")
 	}
 
-	err = bcrypt.CompareHashAndPassword([]byte(foundCredential.Password), []byte(userCredential.Password))
-	if err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(foundCredential.Password), []byte(userCredential.Password)); err != nil {
 		return errors.NewInValidPasswordError("Incorrect password")
 	}
 
-	foundUser := user.User{}
-	err = uow.DB.Preload("Credentials").
-		Where("id = ?", foundCredential.UserID).First(&foundUser).Error
-
-	if err != nil {
+	var foundUser user.User
+	if err := uow.DB.Preload("Credentials").Where("id = ?", foundCredential.UserID).First(&foundUser).Error; err != nil {
 		return errors.NewDatabaseError("Could not retrieve user")
 	}
 
@@ -212,157 +138,172 @@ func (service *UserService) Login(userCredential *credential.Credential, claim *
 	return nil
 }
 
-// func (s *UserService) doesUserExist(id uuid.UUID) error {
-// 	uow := repository.NewUnitOfWork(s.db, true)
-// 	defer uow.RollBack()
+func (service *UserService) GetUserByID(targetUser *user.UserDTO) error {
+	uow := repository.NewUnitOfWork(service.db, true)
+	defer uow.RollBack()
 
-// 	var u user.User
-// 	if err := s.repository.GetRecordByID(uow, id, &u); err != nil {
-// 		return errors.NewNotFoundError("user not found")
-// 	}
-// 	return nil
-// }
+	var dbUser user.User
+	if err := service.repository.GetRecordByID(uow, targetUser.ID, &dbUser, nil); err != nil {
+		return err
+	}
 
-// // ---------------- Get All ----------------
-// func (s *UserService) GetAllUsers() ([]user.User, error) {
-// 	var users []user.User
-// 	uow := repository.NewUnitOfWork(s.db, true)
-// 	defer uow.RollBack()
+	*targetUser = user.ToUserDTO(&dbUser)
+	return nil
+}
 
-// 	if err := s.repository.GetAll(uow, &users); err != nil {
-// 		return nil, err
-// 	}
-// 	return users, nil
-// }
+func (service *UserService) GetAllUsers(allUsers *[]user.UserDTO, totalCount *int, limit, offset int) error {
+	uow := repository.NewUnitOfWork(service.db, true)
+	defer uow.RollBack()
 
-// // ---------------- Get By ID ----------------
-// func (s *UserService) GetUserByID(id uuid.UUID) (*user.User, error) {
-// 	var u user.User
-// 	uow := repository.NewUnitOfWork(s.db, true)
-// 	defer uow.RollBack()
+	var dbUsers []user.User
+	if err := service.repository.GetAll(
+		uow,
+		&dbUsers,
+		repository.PreloadAssociations([]string{"Credentials"}),
+		repository.Paginate(limit, offset, totalCount),
+	); err != nil {
+		return err
+	}
 
-// 	if err := s.repository.GetRecordByID(uow, id, &u); err != nil {
-// 		return nil, err
-// 	}
-// 	return &u, nil
-// }
+	*allUsers = user.ToUserDTOs(dbUsers)
+	uow.Commit()
+	return nil
+}
 
-// // ---------------- Update ----------------
-// func (s *UserService) UpdateUser(userToUpdate *user.User, email string, password string) error {
-// 	if err := s.doesUserExist(userToUpdate.ID); err != nil {
-// 		return err
-// 	}
+func (service *UserService) UpdateUser(targetUser *user.User) error {
+	uow := repository.NewUnitOfWork(service.db, false)
+	defer uow.RollBack()
 
-// 	uow := repository.NewUnitOfWork(s.db, false)
-// 	defer uow.RollBack()
+	targetUser.UpdatedAt = time.Now()
 
-// 	if err := s.repository.UpdateWithMap(uow, &user.User{}, map[string]interface{}{
-// 		"first_name": userToUpdate.FirstName,
-// 		"last_name":  userToUpdate.LastName,
-// 		"phone_no":   userToUpdate.PhoneNo,
-// 		"is_admin":   userToUpdate.IsAdmin,
-// 		"is_active":  userToUpdate.IsActive,
-// 		"updated_by": userToUpdate.UpdatedBy,
-// 		"updated_at": time.Now(),
-// 	}, repository.Filter("id = ?", userToUpdate.ID)); err != nil {
-// 		return err
-// 	}
+	if err := service.repository.Update(
+		uow,
+		targetUser,
+		repository.Filter("id = ?", targetUser.ID),
+	); err != nil {
+		return err
+	}
 
-// 	if email != "" || password != "" {
-// 		updateData := map[string]interface{}{
-// 			"updated_by": userToUpdate.UpdatedBy,
-// 			"updated_at": time.Now(),
-// 		}
-// 		if email != "" {
-// 			updateData["email"] = email
-// 		}
-// 		if password != "" {
-// 			hashedPassword, err := claims.HashPassword(password)
-// 			if err != nil {
-// 				return errors.NewValidationError("failed to hash password")
-// 			}
-// 			updateData["password"] = hashedPassword
-// 		}
+	uow.Commit()
+	return nil
+}
 
-// 		if err := s.repository.UpdateWithMap(
-// 			uow,
-// 			&credential.Credential{},
-// 			updateData,
-// 			repository.Filter("user_id = ?", userToUpdate.ID),
-// 		); err != nil {
-// 			return err
-// 		}
-// 	}
+func (service *UserService) Delete(userID uuid.UUID, deletedBy uuid.UUID) error {
+	if err := service.doesUserExist(userID); err != nil {
+		return err
+	}
 
-// 	uow.Commit()
-// 	return nil
-// }
+	uow := repository.NewUnitOfWork(service.db, false)
+	defer uow.RollBack()
 
-// // ---------------- Delete ----------------
-// func (s *UserService) DeleteUser(id uuid.UUID) error {
-// 	uow := repository.NewUnitOfWork(s.db, false)
-// 	defer uow.RollBack()
+	now := time.Now()
 
-// 	if err := uow.DB.Where("id = ?", id).Delete(&user.User{}).Error; err != nil {
-// 		return err
-// 	}
+	if err := service.repository.UpdateWithMap(uow, &user.User{}, map[string]interface{}{
+		"deleted_at": now,
+		"deleted_by": deletedBy,
+	}, repository.Filter("id = ?", userID)); err != nil {
+		return err
+	}
 
-// 	uow.Commit()
-// 	return nil
-// }
+	if err := service.repository.UpdateWithMap(uow, &credential.Credential{}, map[string]interface{}{
+		"deleted_at": now,
+		"deleted_by": deletedBy,
+	}, repository.Filter("user_id = ?", userID)); err != nil {
+		return err
+	}
 
-// // -------- Login --------
-// type LoginRequest struct {
-// 	Email    string `json:"email"`
-// 	Password string `json:"password"`
-// }
+	uow.Commit()
+	return nil
+}
 
-// type LoginResponse struct {
-// 	Message string `json:"message"`
-// 	Token   string `json:"token"`
-// }
+func (service *UserService) AddAmountToWalllet(userID uuid.UUID, amount float32) error {
+	uow := repository.NewUnitOfWork(service.db, false)
+	defer uow.RollBack()
 
-// func (s *UserService) Login(req LoginRequest) (*LoginResponse, error) {
-// 	if req.Email == "" || req.Password == "" {
-// 		return nil, errors.InvalidCredentials()
-// 	}
+	if err := service.doesUserExist(userID); err != nil {
+		return err
+	}
 
-// 	uow := repository.NewUnitOfWork(s.db, true)
-// 	defer uow.RollBack()
+	var dbUser user.User
+	if err := service.repository.GetRecord(
+		uow,
+		&dbUser,
+		repository.Filter("id = ?", userID),
+	); err != nil {
+		return errors.NewNotFoundError("User not found")
+	}
 
-// 	var cred credential.Credential
-// 	if err := s.repository.GetRecord(uow, &cred, repository.Filter("email = ?", req.Email)); err != nil {
-// 		return nil, errors.InvalidCredentials()
-// 	}
+	dbUser.Wallet += amount
 
-// 	if !claims.CheckPasswordHash(req.Password, cred.Password) {
-// 		return nil, errors.InvalidCredentials()
-// 	}
+	if err := service.repository.UpdateWithMap(
+		uow,
+		&dbUser,
+		map[string]interface{}{
+			"wallet":     dbUser.Wallet,
+			"updated_at": time.Now(),
+		},
+		repository.Filter("id = ?", userID),
+	); err != nil {
+		return errors.NewDatabaseError("Failed to update wallet")
+	}
 
-// 	var u user.User
-// 	if err := s.repository.GetRecordByID(uow, cred.UserID, &u); err != nil {
-// 		return nil, errors.NewNotFoundError("user not found for given credential")
-// 	}
+	uow.Commit()
+	return nil
+}
 
-// 	isAdmin := u.IsAdmin != nil && *u.IsAdmin
-// 	isActive := u.IsActive != nil && *u.IsActive
+func (service *UserService) WithdrawAmountFromWallet(userID uuid.UUID, amount float32) error {
+	uow := repository.NewUnitOfWork(service.db, false)
+	defer uow.RollBack()
 
-// 	token, err := claims.GenerateJWT(u.ID.String(), cred.Email, isAdmin, isActive)
-// 	if err != nil {
-// 		return nil, errors.NewValidationError("failed to generate token")
-// 	}
+	if err := service.doesUserExist(userID); err != nil {
+		return err
+	}
 
-// 	return &LoginResponse{
-// 		Message: "login successful",
-// 		Token:   token,
-// 	}, nil
-// }
+	var dbUser user.User
+	if err := service.repository.GetRecord(
+		uow,
+		&dbUser,
+		repository.Filter("id = ?", userID),
+	); err != nil {
+		return errors.NewNotFoundError("User not found")
+	}
 
-func (service *UserService) doesEmailExists(Email string) error {
-	exists, _ := repository.DoesEmailExist(service.db, Email, credential.Credential{},
-		repository.Filter("`email` = ?", Email))
+	if dbUser.Wallet < amount {
+		return errors.NewValidationError("Insufficient balance")
+	}
+
+	dbUser.Wallet -= amount
+
+	if err := service.repository.UpdateWithMap(
+		uow,
+		&dbUser,
+		map[string]interface{}{
+			"wallet":     dbUser.Wallet,
+			"updated_at": time.Now(),
+		},
+		repository.Filter("id = ?", userID),
+	); err != nil {
+		return errors.NewDatabaseError("Failed to update wallet")
+	}
+
+	uow.Commit()
+	return nil
+}
+
+// ---------------- Helpers ----------------
+func (service *UserService) doesEmailExists(email string) error {
+	exists, _ := repository.DoesEmailExist(service.db, email, credential.Credential{},
+		repository.Filter("email = ?", email))
 	if exists {
 		return errors.NewValidationError("Email is already registered")
+	}
+	return nil
+}
+
+func (service *UserService) doesUserExist(ID uuid.UUID) error {
+	var u user.User
+	if err := service.db.First(&u, "id = ?", ID).Error; err != nil {
+		return errors.NewValidationError("User ID is invalid")
 	}
 	return nil
 }
