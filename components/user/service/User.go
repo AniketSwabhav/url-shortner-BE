@@ -8,6 +8,7 @@ import (
 	"url-shortner-be/components/security"
 	"url-shortner-be/model/credential"
 	"url-shortner-be/model/subscription"
+	"url-shortner-be/model/transaction"
 	"url-shortner-be/model/user"
 	"url-shortner-be/module/repository"
 
@@ -293,6 +294,54 @@ func (service *UserService) WithdrawAmountFromWallet(userID uuid.UUID, amount fl
 		repository.Filter("id = ?", userID),
 	); err != nil {
 		return errors.NewDatabaseError("Failed to update wallet")
+	}
+
+	uow.Commit()
+	return nil
+}
+
+func (service *UserService) GetAllTransactions(transactions *[]transaction.Transaction, totalCount *int, page, pageSize int, userID uuid.UUID) error {
+	if userID == uuid.Nil {
+		return errors.NewValidationError("User ID is not valid")
+	}
+
+	uow := repository.NewUnitOfWork(service.db, true)
+	defer uow.RollBack()
+
+	offset := (page - 1) * pageSize
+
+	if err := service.repository.GetAll(
+		uow,
+		transactions,
+		repository.Filter("user_id = ?", userID),
+		repository.Paginate(pageSize, offset, totalCount),
+		repository.Order("created_at desc"),
+	); err != nil {
+		return err
+	}
+
+	uow.Commit()
+	return nil
+}
+
+func (service *UserService) GetAllSubscription(subscriptions *[]subscription.Subscription, totalCount *int, page, pageSize int, userID uuid.UUID) error {
+	if userID == uuid.Nil {
+		return errors.NewValidationError("User ID is not valid")
+	}
+
+	uow := repository.NewUnitOfWork(service.db, true)
+	defer uow.RollBack()
+
+	offset := (page - 1) * pageSize
+
+	if err := service.repository.GetAll(
+		uow,
+		subscriptions,
+		repository.Filter("user_id = ?", userID),
+		repository.Paginate(pageSize, offset, totalCount),
+		repository.Order("created_at desc"),
+	); err != nil {
+		return err
 	}
 
 	uow.Commit()

@@ -8,6 +8,8 @@ import (
 	"url-shortner-be/components/security"
 	"url-shortner-be/components/web"
 	"url-shortner-be/model/credential"
+	"url-shortner-be/model/subscription"
+	"url-shortner-be/model/transaction"
 	"url-shortner-be/model/user"
 
 	userService "url-shortner-be/components/user/service"
@@ -48,10 +50,10 @@ func (userController *UserController) RegisterRoutes(router *mux.Router) {
 
 	guardedRouter.HandleFunc("/{userId}/wallet/add", userController.AddAmountToWallet).Methods(http.MethodPost)
 	guardedRouter.HandleFunc("/{userId}/wallet/withdraw", userController.WithdrawAmountFromWallet).Methods(http.MethodPost)
-	// guardedRouter.HandleFunc("/{userId}/amount", userController.GetAmount).Methods(http.MethodGet)
-	// guardedRouter.HandleFunc("/{userId}/transactions", userController.GetAllTransactions).Methods(http.MethodGet)
-	// guardedRouter.HandleFunc("/{userId}/subcription", userController.getSubscription).Methods(http.MethodGet)
+	guardedRouter.HandleFunc("/{userId}/transactions", userController.GetAllTransactions).Methods(http.MethodGet)
+	guardedRouter.HandleFunc("/{userId}/subcription", userController.getSubscription).Methods(http.MethodGet)
 
+	// guardedRouter.HandleFunc("/{userId}/amount", userController.GetAmount).Methods(http.MethodGet)
 	// guardedRouter.HandleFunc("/{userId}/renew-urls", userController.RenewUrlsByUserId).Methods(http.MethodPost)
 
 	commonRouter.Use(security.MiddlewareUser)
@@ -300,4 +302,68 @@ func (controller *UserController) WithdrawAmountFromWallet(w http.ResponseWriter
 	web.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": "Amount withdrawn successfully",
 	})
+}
+
+func (controller *UserController) GetAllTransactions(w http.ResponseWriter, r *http.Request) {
+	parser := web.NewParser(r)
+
+	userId, err := parser.GetUUID("userId")
+	if err != nil {
+		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
+		return
+	}
+
+	query := r.URL.Query()
+	page, _ := strconv.Atoi(query.Get("page"))
+	pageSize, _ := strconv.Atoi(query.Get("pageSize"))
+
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 10
+	}
+
+	transactions := []transaction.Transaction{}
+	var totalCount int
+
+	err = controller.UserService.GetAllTransactions(&transactions, &totalCount, page, pageSize, userId)
+	if err != nil {
+		web.RespondError(w, err)
+		return
+	}
+
+	web.RespondJSONWithXTotalCount(w, http.StatusOK, totalCount, transactions)
+}
+
+func (controller *UserController) getSubscription(w http.ResponseWriter, r *http.Request) {
+	parser := web.NewParser(r)
+
+	userId, err := parser.GetUUID("userId")
+	if err != nil {
+		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
+		return
+	}
+
+	query := r.URL.Query()
+	page, _ := strconv.Atoi(query.Get("page"))
+	pageSize, _ := strconv.Atoi(query.Get("pageSize"))
+
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 5
+	}
+
+	subscriptions := []subscription.Subscription{}
+	var totalCount int
+
+	err = controller.UserService.GetAllSubscription(&subscriptions, &totalCount, page, pageSize, userId)
+	if err != nil {
+		web.RespondError(w, err)
+		return
+	}
+
+	web.RespondJSONWithXTotalCount(w, http.StatusOK, totalCount, subscriptions)
 }
