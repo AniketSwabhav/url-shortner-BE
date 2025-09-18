@@ -51,7 +51,7 @@ func MiddlewareUser(next http.Handler) http.Handler {
 
 		if claim.IsAdmin {
 			fmt.Println("User is not Admin")
-			web.RespondError(w, errors.NewUnauthorizedError("Current user not an admin"))
+			web.RespondError(w, errors.NewUnauthorizedError("admin cannot access user"))
 			return
 		}
 
@@ -83,7 +83,6 @@ func MiddlewareActive(next http.Handler) http.Handler {
 			return
 		}
 
-		// Active user (admin or non-admin) passes
 		next.ServeHTTP(w, r)
 	})
 }
