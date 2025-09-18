@@ -8,6 +8,7 @@ import (
 	urlService "url-shortner-be/components/url/service"
 	"url-shortner-be/components/web"
 	"url-shortner-be/model/url"
+	"url-shortner-be/model/user"
 
 	"github.com/gorilla/mux"
 )
@@ -41,7 +42,7 @@ func (urlController *UrlController) RegisterRoutes(router *mux.Router) {
 }
 
 func (controller *UrlController) registerUrl(w http.ResponseWriter, r *http.Request) {
-
+	UrlOwner := &user.User{}
 	newUrl := &url.Url{}
 	parser := web.NewParser(r)
 
@@ -64,7 +65,14 @@ func (controller *UrlController) registerUrl(w http.ResponseWriter, r *http.Requ
 	}
 	newUrl.CreatedBy = userIdFromURL
 
-	err = controller.UrlService.CreateUrl(userIdFromURL, newUrl)
+	UrlOwner.ID, err = security.ExtractUserIDFromToken(r)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
+	err = controller.UrlService.CreateUrl(userIdFromURL, UrlOwner, newUrl)
 	if err != nil {
 		controller.log.Print(err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -72,6 +80,26 @@ func (controller *UrlController) registerUrl(w http.ResponseWriter, r *http.Requ
 	}
 	web.RespondJSON(w, http.StatusCreated, newUrl)
 }
+
+// for short url redirection---------------------------------------------------
+func (controller *UrlController) RegisterRedirectRoute(router *mux.Router) {
+	redirectRouter := router.PathPrefix("/").Subrouter()
+	redirectRouter.HandleFunc("/{short-url}", controller.redirectUrl)
+}
+
+func (controller *UrlController) redirectUrl(w http.ResponseWriter, r *http.Request) {
+
+	params := mux.Vars(r)
+
+	longUrl, err := controller.UrlService.RedirectUrl(params[("short-url")])
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+	}
+	http.Redirect(w, r, longUrl, http.StatusSeeOther)
+
+}
+
+//---------------------------------------------------------------------------
 
 func (controller *UrlController) getAllUrls(w http.ResponseWriter, r *http.Request) {}
 

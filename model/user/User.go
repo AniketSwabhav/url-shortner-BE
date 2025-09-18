@@ -42,20 +42,6 @@ func (user *User) Validate() error {
 	return nil
 }
 
-// func (user *User) Validate() error {
-
-// 	if util.IsEmpty(user.FirstName) || !util.ValidateString(user.FirstName) {
-// 		return errors.NewValidationError("User FirstName must be specified and must have characters only")
-// 	}
-// 	if util.IsEmpty(user.LastName) || !util.ValidateString(user.LastName) {
-// 		return errors.NewValidationError("User LastName must be specified and must have characters only")
-// 	}
-// 	if util.IsEmpty(user.PhoneNo) || !util.ValidateContact(user.PhoneNo) {
-// 		return errors.NewValidationError("User Contact must be specified and have 10 digits")
-// 	}
-// 	return nil
-// }
-
 type UserDTO struct {
 	ID        uuid.UUID `json:"id"`
 	FirstName string    `json:"firstName"`

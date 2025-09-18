@@ -7,6 +7,7 @@ import (
 	"url-shortner-be/components/log"
 	"url-shortner-be/components/security"
 	"url-shortner-be/model/credential"
+	"url-shortner-be/model/subscription"
 	"url-shortner-be/model/user"
 	"url-shortner-be/module/repository"
 
@@ -89,6 +90,14 @@ func (service *UserService) CreateUser(newUser *user.User) error {
 		return fmt.Errorf("failed to hash password: %w", err)
 	}
 	newUser.Credentials.Password = string(hashedPassword)
+
+	subscription := &subscription.Subscription{}
+	err = service.repository.GetRecord(uow, &subscription, repository.Order("created_at desc"))
+	if err != nil {
+		uow.RollBack()
+		return err
+	}
+	newUser.UrlCount = subscription.FreeUrlLimit
 
 	if err := uow.DB.Create(newUser).Error; err != nil {
 		return errors.NewDatabaseError("Failed to create user")

@@ -32,20 +32,27 @@ func (userController *UserController) RegisterRoutes(router *mux.Router) {
 	// router.HandleFunc("/login", userController.Login).Methods(http.MethodPost)
 
 	userRouter := router.PathPrefix("/user").Subrouter()
-	// guardedRouter := userRouter.PathPrefix("/").Subrouter()
+	guardedRouter := userRouter.PathPrefix("/").Subrouter()
 	unguardedRouter := userRouter.PathPrefix("/").Subrouter()
 	commonRouter := userRouter.PathPrefix("/").Subrouter()
 
 	unguardedRouter.HandleFunc("/login", userController.login).Methods(http.MethodPost)
+
 	unguardedRouter.HandleFunc("/register-user", userController.registerUser).Methods(http.MethodPost)
 	unguardedRouter.HandleFunc("/register-admin", userController.registerAdmin).Methods(http.MethodPost)
-	unguardedRouter.HandleFunc("/{id}", userController.GetUserByID).Methods(http.MethodGet)
-	unguardedRouter.HandleFunc("/", userController.GetAllUsers).Methods(http.MethodGet)
-	unguardedRouter.HandleFunc("/{id}", userController.UpdateUser).Methods(http.MethodPut)
-	unguardedRouter.HandleFunc("/{id}", userController.deleteUserById).Methods(http.MethodDelete)
 
-	unguardedRouter.HandleFunc("/{userId}/wallet/add", userController.AddAmountToWallet).Methods(http.MethodPost)
-	unguardedRouter.HandleFunc("/{userId}/wallet/withdraw", userController.WithdrawAmountFromWallet).Methods(http.MethodPost)
+	guardedRouter.HandleFunc("/", userController.GetAllUsers).Methods(http.MethodGet)
+	guardedRouter.HandleFunc("/{userId}", userController.GetUserByID).Methods(http.MethodGet)
+	guardedRouter.HandleFunc("/{userId}", userController.UpdateUser).Methods(http.MethodPut)
+	guardedRouter.HandleFunc("/{userId}", userController.deleteUserById).Methods(http.MethodDelete)
+
+	guardedRouter.HandleFunc("/{userId}/wallet/add", userController.AddAmountToWallet).Methods(http.MethodPost)
+	guardedRouter.HandleFunc("/{userId}/wallet/withdraw", userController.WithdrawAmountFromWallet).Methods(http.MethodPost)
+	// guardedRouter.HandleFunc("/{userId}/amount", userController.GetAmount).Methods(http.MethodGet)
+	// guardedRouter.HandleFunc("/{userId}/transactions", userController.GetAllTransactions).Methods(http.MethodGet)
+	// guardedRouter.HandleFunc("/{userId}/subcription", userController.getSubscription).Methods(http.MethodGet)
+
+	// guardedRouter.HandleFunc("/{userId}/renew-urls", userController.RenewUrlsByUser).Methods(http.MethodPost)
 
 	commonRouter.Use(security.MiddlewareUser)
 }
@@ -58,14 +65,6 @@ func (controller *UserController) registerAdmin(w http.ResponseWriter, r *http.R
 		web.RespondError(w, errors.NewHTTPError("unable to parse requested data", http.StatusBadRequest))
 		return
 	}
-
-	newAdmin.CreatedBy, err = security.ExtractUserIDFromToken(r)
-	if err != nil {
-		controller.log.Error(err.Error())
-		web.RespondError(w, err)
-		return
-	}
-	newAdmin.Credentials.CreatedBy = newAdmin.CreatedBy
 
 	err = controller.UserService.CreateAdmin(&newAdmin)
 	if err != nil {
@@ -84,14 +83,6 @@ func (controller *UserController) registerUser(w http.ResponseWriter, r *http.Re
 		web.RespondError(w, errors.NewHTTPError("unable to parse requested data", http.StatusBadRequest))
 		return
 	}
-
-	newUser.CreatedBy, err = security.ExtractUserIDFromToken(r)
-	if err != nil {
-		controller.log.Error(err.Error())
-		web.RespondError(w, err)
-		return
-	}
-	newUser.Credentials.CreatedBy = newUser.CreatedBy
 
 	err = controller.UserService.CreateUser(&newUser)
 	if err != nil {
@@ -138,7 +129,7 @@ func (controller *UserController) GetUserByID(w http.ResponseWriter, r *http.Req
 
 	parser := web.NewParser(r)
 
-	userIdFromURL, err := parser.GetUUID("id")
+	userIdFromURL, err := parser.GetUUID("userId")
 	if err != nil {
 		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
 		return
@@ -159,7 +150,7 @@ func (controller *UserController) UpdateUser(w http.ResponseWriter, r *http.Requ
 
 	parser := web.NewParser(r)
 
-	userIdFromURL, err := parser.GetUUID("id")
+	userIdFromURL, err := parser.GetUUID("userId")
 	if err != nil {
 		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
 		return
@@ -220,7 +211,7 @@ func (controller *UserController) GetAllUsers(w http.ResponseWriter, r *http.Req
 func (controller *UserController) deleteUserById(w http.ResponseWriter, r *http.Request) {
 	parser := web.NewParser(r)
 
-	userID, err := parser.GetUUID("id")
+	userID, err := parser.GetUUID("userId")
 	if err != nil {
 		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
 		return
