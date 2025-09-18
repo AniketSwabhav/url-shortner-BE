@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"net/http"
 	"url-shortner-be/components/errors"
 	"url-shortner-be/components/log"
@@ -35,7 +36,7 @@ func (urlController *UrlController) RegisterRoutes(router *mux.Router) {
 	urlRouter.HandleFunc("/url/{urlId}", urlController.getUrl).Methods(http.MethodGet)
 	urlRouter.HandleFunc("/url/{urlId}", urlController.updateUrl).Methods(http.MethodPut)
 	urlRouter.HandleFunc("/url/{urlId}", urlController.deleteUrl).Methods(http.MethodDelete)
-	urlRouter.HandleFunc("/url/{urlId}/renew-visits", urlController.renewVisits).Methods(http.MethodPost)
+	urlRouter.HandleFunc("/url/{urlId}/renew-visits", urlController.renewUrlVisits).Methods(http.MethodPost)
 
 	urlRouter.Use(security.MiddlewareUrl)
 
@@ -96,7 +97,7 @@ func (controller *UrlController) redirectUrl(w http.ResponseWriter, r *http.Requ
 		http.Error(w, err.Error(), http.StatusForbidden)
 	}
 	http.Redirect(w, r, longUrl, http.StatusSeeOther)
-
+	fmt.Println("Redirected to: ", longUrl)
 }
 
 //---------------------------------------------------------------------------
@@ -111,4 +112,39 @@ func (controller *UrlController) updateUrl(w http.ResponseWriter, r *http.Reques
 
 func (controller *UrlController) deleteUrl(w http.ResponseWriter, r *http.Request) {}
 
-func (controller *UrlController) renewVisits(w http.ResponseWriter, r *http.Request) {}
+func (controller *UrlController) renewUrlVisits(w http.ResponseWriter, r *http.Request) {
+	urlToRenew := &url.Url{}
+	parser := web.NewParser(r)
+
+	urlIdFromURL, err := parser.GetUUID("userId")
+	if err != nil {
+		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
+		return
+	}
+	urlToRenew.ID = urlIdFromURL
+
+	urlToRenew.UserID, err = security.ExtractUserIDFromToken(r)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
+	var numVisits int
+	err = web.UnmarshalJSON(r, &numVisits)
+	if err != nil {
+		web.RespondError(w, errors.NewHTTPError("unable to parse requested data", http.StatusBadRequest))
+		return
+	}
+
+	err = controller.UrlService.RenewUrlVisits(urlToRenew, numVisits)
+	if err != nil {
+		web.RespondError(w, err)
+		return
+	}
+
+	web.RespondJSON(w, http.StatusOK, map[string]string{
+		"message": "Url Renewed Successfully",
+	})
+
+}

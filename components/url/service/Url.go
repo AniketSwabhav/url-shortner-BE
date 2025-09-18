@@ -2,6 +2,7 @@ package service
 
 import (
 	"url-shortner-be/components/errors"
+	transactionserv "url-shortner-be/components/transaction/service"
 	"url-shortner-be/model/subscription"
 	"url-shortner-be/model/url"
 	"url-shortner-be/model/user"
@@ -12,8 +13,9 @@ import (
 )
 
 type UrlService struct {
-	db         *gorm.DB
-	repository repository.Repository
+	db                 *gorm.DB
+	repository         repository.Repository
+	transactionservice *transactionserv.TransactionService
 }
 
 func NewUrlService(DB *gorm.DB, repo repository.Repository) *UrlService {
@@ -107,4 +109,56 @@ func (service *UrlService) RedirectUrl(shortUrl string) (string, error) {
 
 	uow.Commit()
 	return url.LongUrl, nil
+}
+
+func (service *UrlService) RenewUrlVisits(urlToRenew *url.Url, numVisits int) error {
+
+	uow := repository.NewUnitOfWork(service.db, true)
+	defer uow.RollBack()
+
+	if numVisits <= 0 {
+		return errors.NewValidationError("number of visits should be a positive integer")
+	}
+
+	urlOwner := &user.User{}
+	if err := service.repository.GetRecordByID(uow, urlToRenew.UserID, urlOwner); err != nil {
+		return errors.NewDatabaseError("unable to find url owner")
+	}
+
+	tempuser := &user.User{}
+	if err := service.repository.GetRecord(uow, tempuser, repository.Filter("id = ? And user_id = ?", urlToRenew.ID, urlToRenew.UserID)); err != nil {
+		return errors.NewValidationError("no url found for this user with given url id")
+	}
+
+	subscription := &subscription.Subscription{}
+	if err := service.repository.GetRecord(uow, &subscription, repository.Order("created_at desc")); err != nil {
+		return err
+	}
+
+	totalPriceToRenew := float32(numVisits) * subscription.PerUrlPrice
+
+	if urlOwner.Wallet < totalPriceToRenew {
+		return errors.NewValidationError("insufficient balance in wallet, please add money to wallet")
+	}
+
+	urlOwner.Wallet -= totalPriceToRenew
+	urlToRenew.Visits += numVisits
+
+	if err := service.repository.UpdateWithMap(uow, urlOwner, map[string]interface{}{"wallet": urlOwner.Wallet}); err != nil {
+		uow.RollBack()
+		return err
+	}
+
+	if err := service.repository.UpdateWithMap(uow, urlToRenew, map[string]interface{}{"visits": urlToRenew.Visits}); err != nil {
+		uow.RollBack()
+		return err
+	}
+
+	if err := service.transactionservice.CreateTransaction(uow, urlOwner.ID, totalPriceToRenew); err != nil {
+		uow.RollBack()
+		return err
+	}
+
+	uow.Commit()
+	return nil
 }

@@ -52,7 +52,7 @@ func (userController *UserController) RegisterRoutes(router *mux.Router) {
 	// guardedRouter.HandleFunc("/{userId}/transactions", userController.GetAllTransactions).Methods(http.MethodGet)
 	// guardedRouter.HandleFunc("/{userId}/subcription", userController.getSubscription).Methods(http.MethodGet)
 
-	// guardedRouter.HandleFunc("/{userId}/renew-urls", userController.RenewUrlsByUser).Methods(http.MethodPost)
+	// guardedRouter.HandleFunc("/{userId}/renew-urls", userController.RenewUrlsByUserId).Methods(http.MethodPost)
 
 	commonRouter.Use(security.MiddlewareUser)
 }

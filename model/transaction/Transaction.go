@@ -9,5 +9,5 @@ import (
 type Transaction struct {
 	model.Base
 	Amount float32   `json:"amount" gorm:"type:float"`
-	UserId uuid.UUID `json:"userId" gorm:"not null;type:varchar(36)"`
+	UserID uuid.UUID `json:"userId" gorm:"not null;type:varchar(36)"`
 }
