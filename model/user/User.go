@@ -22,7 +22,7 @@ type User struct {
 	Wallet       float32                      `json:"wallet" gorm:"type:float"`
 	UrlCount     int                          `json:"urlCount" gorm:"type:int"`
 	Credentials  *credential.Credential       `json:"credential"`
-	Url          []url.Url                    `json:"url" gorm:"foreignKey:urlID"`
+	Url          []*url.Url                   `json:"url" gorm:"foreignKey:urlID"`
 	Subscription []*subscription.Subscription `json:"Subscription" gorm:"foreignKey:subscriptionID"`
 	Transactions []*transaction.Transaction   `json:"transactions" gorm:"foreignKey:ID"`
 }
@@ -43,26 +43,34 @@ func (user *User) Validate() error {
 }
 
 type UserDTO struct {
-	ID        uuid.UUID `json:"id"`
-	FirstName string    `json:"firstName"`
-	LastName  string    `json:"lastName"`
-	PhoneNo   string    `json:"phoneNo"`
-	IsAdmin   *bool     `json:"isAdmin"`
-	IsActive  *bool     `json:"isActive"`
-	Wallet    float32   `json:"wallet"`
-	UrlCount  int       `json:"urlCount"`
+	ID           uuid.UUID                    `json:"id"`
+	FirstName    string                       `json:"firstName"`
+	LastName     string                       `json:"lastName"`
+	PhoneNo      string                       `json:"phoneNo"`
+	IsAdmin      *bool                        `json:"isAdmin"`
+	IsActive     *bool                        `json:"isActive"`
+	Wallet       float32                      `json:"wallet"`
+	UrlCount     int                          `json:"urlCount"`
+	Credentials  *credential.Credential       `json:"credential"`
+	Url          []*url.Url                   `json:"url" gorm:"foreignKey:urlID"`
+	Subscription []*subscription.Subscription `json:"Subscription" gorm:"foreignKey:subscriptionID"`
+	Transactions []*transaction.Transaction   `json:"transactions" gorm:"foreignKey:ID"`
 }
 
 func ToUserDTO(u *User) UserDTO {
 	return UserDTO{
-		ID:        u.Base.ID,
-		FirstName: u.FirstName,
-		LastName:  u.LastName,
-		PhoneNo:   u.PhoneNo,
-		IsAdmin:   u.IsAdmin,
-		IsActive:  u.IsActive,
-		Wallet:    u.Wallet,
-		UrlCount:  u.UrlCount,
+		ID:           u.Base.ID,
+		FirstName:    u.FirstName,
+		LastName:     u.LastName,
+		PhoneNo:      u.PhoneNo,
+		IsAdmin:      u.IsAdmin,
+		IsActive:     u.IsActive,
+		Wallet:       u.Wallet,
+		UrlCount:     u.UrlCount,
+		Url:          u.Url,
+		Credentials:  u.Credentials,
+		Subscription: u.Subscription,
+		Transactions: u.Transactions,
 	}
 }
 
