@@ -18,6 +18,18 @@ type Url struct {
 	UserID   uuid.UUID `json:"userId" gorm:"foreignkey:ID;type:char(36)"`
 }
 
+type UrlDTO struct {
+	model.Base
+	LongUrl  string    `json:"longUrl" gorm:"not null;type:text"`
+	ShortUrl string    `json:"shortUrl" gorm:"not null;unique;type:varchar(5)"`
+	Visits   int       `json:"visits" gorm:"not null;type:int;default:0"`
+	UserID   uuid.UUID `json:"userId" gorm:"foreignkey:ID;type:char(36)"`
+}
+
+func (*UrlDTO) TableName() string {
+	return "urls"
+}
+
 func (url *Url) Validate(inputUrl string) error {
 	resp, err := http.Get(inputUrl)
 	if err != nil {

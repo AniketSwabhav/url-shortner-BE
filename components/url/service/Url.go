@@ -1,6 +1,7 @@
 package service
 
 import (
+	"time"
 	"url-shortner-be/components/errors"
 	transactionserv "url-shortner-be/components/transaction/service"
 	"url-shortner-be/model/subscription"
@@ -165,5 +166,70 @@ func (service *UrlService) RenewUrlVisits(urlToRenew *url.Url) error {
 	}
 
 	uow.Commit()
+	return nil
+}
+
+func (service *UrlService) GetAllUrls(allUrl *[]url.UrlDTO, totalCount *int, limit, offset int) error {
+	uow := repository.NewUnitOfWork(service.db, true)
+	defer uow.RollBack()
+
+	err := service.repository.GetAll(
+		uow,
+		allUrl,
+		repository.Paginate(limit, offset, totalCount),
+	)
+	if err != nil {
+		return err
+	}
+
+	err = service.repository.GetCount(uow, allUrl, totalCount)
+	if err != nil {
+		return err
+	}
+
+	uow.Commit()
+
+	return nil
+}
+
+func (service *UrlService) GetUrlByID(targetURL *url.UrlDTO) error {
+	uow := repository.NewUnitOfWork(service.db, true)
+	defer uow.RollBack()
+
+	err := service.repository.GetRecordByID(uow, targetURL.ID, targetURL)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (service *UrlService) Delete(urlID uuid.UUID, deletedBy uuid.UUID) error {
+	if err := service.doesUrlExist(urlID); err != nil {
+		return err
+	}
+
+	uow := repository.NewUnitOfWork(service.db, false)
+	defer uow.RollBack()
+
+	now := time.Now()
+
+	if err := service.repository.UpdateWithMap(uow, &url.Url{}, map[string]interface{}{
+		"deleted_at": now,
+		"deleted_by": deletedBy,
+	}, repository.Filter("id = ?", urlID)); err != nil {
+		return err
+	}
+
+	uow.Commit()
+	return nil
+}
+
+func (service *UrlService) doesUrlExist(urlID uuid.UUID) error {
+	var u url.Url
+	if err := service.db.First(&u, "id = ?", urlID).Error; err != nil {
+		return errors.NewValidationError("URL ID is invalid")
+	}
 	return nil
 }

@@ -18,17 +18,14 @@ func NewTransactionModuleConfig(db *gorm.DB) *TransactionModuleConfig {
 
 func (c *TransactionModuleConfig) MigrateTables() {
 
-	var models = []interface{}{
-		&Transaction{},
+	model := &Transaction{}
+
+	err := c.DB.AutoMigrate(model).Error
+	if err != nil {
+		log.NewLog().Print("Auto Migrating Trnasaction ==> %s", err)
 	}
 
-	for _, model := range models {
-		if err := c.DB.AutoMigrate(model).Error; err != nil {
-			log.GetLogger().Print("Auto Migration ==> %s", err)
-		}
-	}
-
-	err := c.DB.Model(&Transaction{}).AddForeignKey("user_id", "users(id)", "CASCADE", "CASCADE").Error
+	err = c.DB.Model(&Transaction{}).AddForeignKey("user_id", "users(id)", "CASCADE", "CASCADE").Error
 	if err != nil {
 		log.GetLogger().Print("Foreign Key Constraints Of Transaction ==> %s", err)
 	}

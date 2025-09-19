@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 	"url-shortner-be/components/errors"
-	"url-shortner-be/components/log"
 	"url-shortner-be/components/security"
 	"url-shortner-be/model/credential"
 	"url-shortner-be/model/subscription"
@@ -41,11 +40,6 @@ func (service *UserService) CreateAdmin(newUser *user.User) error {
 		return err
 	}
 
-	if err := newUser.Validate(); err != nil {
-		log.GetLogger().Error(err.Error())
-		return err
-	}
-
 	if err := newUser.Credentials.Validate(); err != nil {
 		return err
 	}
@@ -74,11 +68,6 @@ func (service *UserService) CreateUser(newUser *user.User) error {
 	defer uow.RollBack()
 
 	if err := service.doesEmailExists(newUser.Credentials.Email); err != nil {
-		return err
-	}
-
-	if err := newUser.Validate(); err != nil {
-		log.GetLogger().Error(err.Error())
 		return err
 	}
 
@@ -152,12 +141,11 @@ func (service *UserService) GetUserByID(targetUser *user.UserDTO) error {
 	uow := repository.NewUnitOfWork(service.db, true)
 	defer uow.RollBack()
 
-	var dbUser user.User
-	if err := service.repository.GetRecordByID(uow, targetUser.ID, &dbUser, nil); err != nil {
+	err := service.repository.GetRecordByID(uow, targetUser.ID, targetUser, repository.PreloadAssociations([]string{"Credentials", "Url", "Transactions"}))
+	if err != nil {
 		return err
 	}
 
-	*targetUser = user.ToUserDTO(&dbUser)
 	return nil
 }
 
@@ -165,32 +153,36 @@ func (service *UserService) GetAllUsers(allUsers *[]user.UserDTO, totalCount *in
 	uow := repository.NewUnitOfWork(service.db, true)
 	defer uow.RollBack()
 
-	var dbUsers []user.User
-	if err := service.repository.GetAll(
+	err := service.repository.GetAll(
 		uow,
-		&dbUsers,
-		repository.PreloadAssociations([]string{"Credentials"}),
-		repository.Paginate(limit, offset, totalCount),
-	); err != nil {
+		allUsers,
+		repository.PreloadAssociations([]string{"Credentials", "Url", "Transactions"}),
+		repository.Paginate(limit, offset, totalCount))
+	if err != nil {
 		return err
 	}
 
-	*allUsers = user.ToUserDTOs(dbUsers)
+	err = service.repository.GetCount(uow, allUsers, totalCount)
+	if err != nil {
+		return err
+	}
+
 	uow.Commit()
 	return nil
 }
 
 func (service *UserService) UpdateUser(targetUser *user.User) error {
+
+	if err := service.doesUserExist(targetUser.ID); err != nil {
+		return err
+	}
+
 	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
 
 	targetUser.UpdatedAt = time.Now()
 
-	if err := service.repository.Update(
-		uow,
-		targetUser,
-		repository.Filter("id = ?", targetUser.ID),
-	); err != nil {
+	if err := service.repository.Update(uow, targetUser, repository.Filter("id = ?", targetUser.ID)); err != nil {
 		return err
 	}
 
@@ -329,25 +321,6 @@ func (service *UserService) GetAllTransactions(transactions *[]transaction.Trans
 	uow.Commit()
 	return nil
 }
-
-// func (service *UserService) GetAllUsers(allUsers *[]user.UserDTO, totalCount *int, limit, offset int) error {
-// 	uow := repository.NewUnitOfWork(service.db, true)
-// 	defer uow.RollBack()
-
-// 	var dbUsers []user.User
-// 	if err := service.repository.GetAll(
-// 		uow,
-// 		&dbUsers,
-// 		repository.PreloadAssociations([]string{"Credentials"}),
-// 		repository.Paginate(limit, offset, totalCount),
-// 	); err != nil {
-// 		return err
-// 	}
-
-// 	*allUsers = user.ToUserDTOs(dbUsers)
-// 	uow.Commit()
-// 	return nil
-// }
 
 func (service *UserService) GetAllSubscription(subscriptions *[]subscription.Subscription, totalCount *int, page, pageSize int, userID uuid.UUID) error {
 	if userID == uuid.Nil {

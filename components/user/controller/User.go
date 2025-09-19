@@ -34,29 +34,32 @@ func (userController *UserController) RegisterRoutes(router *mux.Router) {
 	// router.HandleFunc("/login", userController.Login).Methods(http.MethodPost)
 
 	userRouter := router.PathPrefix("/user").Subrouter()
-	guardedRouter := userRouter.PathPrefix("/").Subrouter()
 	unguardedRouter := userRouter.PathPrefix("/").Subrouter()
-	commonRouter := userRouter.PathPrefix("/").Subrouter()
+	userguardedRouter := userRouter.PathPrefix("/").Subrouter()
+	adminguardedRouter := userRouter.PathPrefix("/").Subrouter()
+
+	// commonRouter := userRouter.PathPrefix("/").Subrouter()
+	// commonRouter.Use(security.MiddlewareCommon)
 
 	unguardedRouter.HandleFunc("/login", userController.login).Methods(http.MethodPost)
-
 	unguardedRouter.HandleFunc("/register-user", userController.registerUser).Methods(http.MethodPost)
 	unguardedRouter.HandleFunc("/register-admin", userController.registerAdmin).Methods(http.MethodPost)
 
-	guardedRouter.HandleFunc("/", userController.GetAllUsers).Methods(http.MethodGet)
-	guardedRouter.HandleFunc("/{userId}", userController.GetUserByID).Methods(http.MethodGet)
-	guardedRouter.HandleFunc("/{userId}", userController.UpdateUser).Methods(http.MethodPut)
-	guardedRouter.HandleFunc("/{userId}", userController.deleteUserById).Methods(http.MethodDelete)
+	userguardedRouter.HandleFunc("/{userId}/wallet/add", userController.AddAmountToWallet).Methods(http.MethodPost)
+	userguardedRouter.HandleFunc("/{userId}/wallet/withdraw", userController.WithdrawAmountFromWallet).Methods(http.MethodPost)
+	// userguardedRouter.HandleFunc("/{userId}/renew-urls", userController.RenewUrlsByUserId).Methods(http.MethodPost)
+	// userguardedRouter.HandleFunc("/{userId}/amount", userController.GetAmount).Methods(http.MethodGet)
 
-	guardedRouter.HandleFunc("/{userId}/wallet/add", userController.AddAmountToWallet).Methods(http.MethodPost)
-	guardedRouter.HandleFunc("/{userId}/wallet/withdraw", userController.WithdrawAmountFromWallet).Methods(http.MethodPost)
-	guardedRouter.HandleFunc("/{userId}/transactions", userController.GetAllTransactions).Methods(http.MethodGet)
-	guardedRouter.HandleFunc("/{userId}/subcription", userController.getSubscription).Methods(http.MethodGet)
+	adminguardedRouter.HandleFunc("/", userController.GetAllUsers).Methods(http.MethodGet)
+	adminguardedRouter.HandleFunc("/{userId}", userController.GetUserByID).Methods(http.MethodGet)
+	adminguardedRouter.HandleFunc("/{userId}", userController.UpdateUserById).Methods(http.MethodPut)
+	adminguardedRouter.HandleFunc("/{userId}", userController.deleteUserById).Methods(http.MethodDelete)
+	adminguardedRouter.HandleFunc("/{userId}/transactions", userController.GetAllTransactions).Methods(http.MethodGet)
+	adminguardedRouter.HandleFunc("/{userId}/subcription", userController.getSubscription).Methods(http.MethodGet)
 
-	// guardedRouter.HandleFunc("/{userId}/amount", userController.GetAmount).Methods(http.MethodGet)
-	// guardedRouter.HandleFunc("/{userId}/renew-urls", userController.RenewUrlsByUserId).Methods(http.MethodPost)
+	userguardedRouter.Use(security.MiddlewareUser)
+	adminguardedRouter.Use(security.MiddlewareAdmin)
 
-	commonRouter.Use(security.MiddlewareUser)
 }
 
 func (controller *UserController) registerAdmin(w http.ResponseWriter, r *http.Request) {
@@ -66,6 +69,10 @@ func (controller *UserController) registerAdmin(w http.ResponseWriter, r *http.R
 	if err != nil {
 		web.RespondError(w, errors.NewHTTPError("unable to parse requested data", http.StatusBadRequest))
 		return
+	}
+
+	if err := newAdmin.Validate(); err != nil {
+		log.GetLogger().Error(err.Error())
 	}
 
 	err = controller.UserService.CreateAdmin(&newAdmin)
@@ -84,6 +91,11 @@ func (controller *UserController) registerUser(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		web.RespondError(w, errors.NewHTTPError("unable to parse requested data", http.StatusBadRequest))
 		return
+	}
+
+	if err := newUser.Validate(); err != nil {
+		log.GetLogger().Error(err.Error())
+
 	}
 
 	err = controller.UserService.CreateUser(&newUser)
@@ -147,10 +159,19 @@ func (controller *UserController) GetUserByID(w http.ResponseWriter, r *http.Req
 	web.RespondJSON(w, http.StatusOK, targetUser)
 }
 
-func (controller *UserController) UpdateUser(w http.ResponseWriter, r *http.Request) {
+func (controller *UserController) UpdateUserById(w http.ResponseWriter, r *http.Request) {
 	var targetUser = &user.User{}
-
 	parser := web.NewParser(r)
+
+	err := web.UnmarshalJSON(r, &targetUser)
+	if err != nil {
+		web.RespondError(w, errors.NewHTTPError("Unable to parse request body", http.StatusBadRequest))
+		return
+	}
+
+	if err := targetUser.Validate(); err != nil {
+		log.GetLogger().Error(err.Error())
+	}
 
 	userIdFromURL, err := parser.GetUUID("userId")
 	if err != nil {
@@ -158,12 +179,6 @@ func (controller *UserController) UpdateUser(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	targetUser.ID = userIdFromURL
-
-	err = web.UnmarshalJSON(r, &targetUser)
-	if err != nil {
-		web.RespondError(w, errors.NewHTTPError("Unable to parse request body", http.StatusBadRequest))
-		return
-	}
 
 	targetUser.UpdatedBy, err = security.ExtractUserIDFromToken(r)
 	if err != nil {
