@@ -93,12 +93,12 @@ func (service *UserService) CreateUser(newUser *user.User) error {
 	newUser.Credentials.Password = string(hashedPassword)
 
 	subscription := &subscription.Subscription{}
-	err = service.repository.GetRecord(uow, &subscription, repository.Order("created_at desc"))
+	err = service.repository.GetRecord(uow, &subscription)
 	if err != nil {
 		uow.RollBack()
 		return err
 	}
-	newUser.UrlCount = subscription.FreeUrlLimit
+	newUser.UrlCount = subscription.FreeShortUrls
 
 	if err := uow.DB.Create(newUser).Error; err != nil {
 		return errors.NewDatabaseError("Failed to create user")
@@ -226,28 +226,36 @@ func (service *UserService) Delete(userID uuid.UUID, deletedBy uuid.UUID) error 
 	return nil
 }
 
-func (service *UserService) AddAmountToWalllet(userID uuid.UUID, amount float32) error {
+func (service *UserService) AddAmountToWalllet(userID uuid.UUID, userToAddMoney *user.User) error {
 	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
+
+	if userToAddMoney.Wallet <= 0 {
+		return errors.NewValidationError("Amount must be greater than zero")
+	}
 
 	if err := service.doesUserExist(userID); err != nil {
 		return err
 	}
 
 	var dbUser user.User
-	if err := service.repository.GetRecord(
-		uow,
-		&dbUser,
-		repository.Filter("id = ?", userID),
-	); err != nil {
+	if err := service.repository.GetRecord(uow, &dbUser, repository.Filter("id = ?", userID)); err != nil {
 		return errors.NewNotFoundError("User not found")
+	}
+
+	if dbUser.ID != userToAddMoney.ID {
+		return errors.NewUnauthorizedError("you are not authorized to add amount to this wallet")
+	}
+
+	var amount = userToAddMoney.Wallet
+
+	if amount <= 0 {
+		return errors.NewValidationError("Amount must be greater than zero")
 	}
 
 	dbUser.Wallet += amount
 
-	if err := service.repository.UpdateWithMap(
-		uow,
-		&dbUser,
+	if err := service.repository.UpdateWithMap(uow, &dbUser,
 		map[string]interface{}{
 			"wallet":     dbUser.Wallet,
 			"updated_at": time.Now(),
@@ -300,7 +308,7 @@ func (service *UserService) WithdrawAmountFromWallet(userID uuid.UUID, amount fl
 	return nil
 }
 
-func (service *UserService) GetAllTransactions(transactions *[]transaction.Transaction, totalCount *int, page, pageSize int, userID uuid.UUID) error {
+func (service *UserService) GetAllTransactions(transactions *[]transaction.Transaction, totalCount *int, limit, offset int, userID uuid.UUID) error {
 	if userID == uuid.Nil {
 		return errors.NewValidationError("User ID is not valid")
 	}
@@ -308,13 +316,11 @@ func (service *UserService) GetAllTransactions(transactions *[]transaction.Trans
 	uow := repository.NewUnitOfWork(service.db, true)
 	defer uow.RollBack()
 
-	offset := (page - 1) * pageSize
-
 	if err := service.repository.GetAll(
 		uow,
 		transactions,
 		repository.Filter("user_id = ?", userID),
-		repository.Paginate(pageSize, offset, totalCount),
+		repository.Paginate(limit, offset, totalCount),
 		repository.Order("created_at desc"),
 	); err != nil {
 		return err
@@ -323,6 +329,25 @@ func (service *UserService) GetAllTransactions(transactions *[]transaction.Trans
 	uow.Commit()
 	return nil
 }
+
+// func (service *UserService) GetAllUsers(allUsers *[]user.UserDTO, totalCount *int, limit, offset int) error {
+// 	uow := repository.NewUnitOfWork(service.db, true)
+// 	defer uow.RollBack()
+
+// 	var dbUsers []user.User
+// 	if err := service.repository.GetAll(
+// 		uow,
+// 		&dbUsers,
+// 		repository.PreloadAssociations([]string{"Credentials"}),
+// 		repository.Paginate(limit, offset, totalCount),
+// 	); err != nil {
+// 		return err
+// 	}
+
+// 	*allUsers = user.ToUserDTOs(dbUsers)
+// 	uow.Commit()
+// 	return nil
+// }
 
 func (service *UserService) GetAllSubscription(subscriptions *[]subscription.Subscription, totalCount *int, page, pageSize int, userID uuid.UUID) error {
 	if userID == uuid.Nil {

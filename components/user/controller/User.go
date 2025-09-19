@@ -241,25 +241,28 @@ func (controller *UserController) deleteUserById(w http.ResponseWriter, r *http.
 func (controller *UserController) AddAmountToWallet(w http.ResponseWriter, r *http.Request) {
 	parser := web.NewParser(r)
 
-	userId, err := parser.GetUUID("userId")
+	userIdFromUrl, err := parser.GetUUID("userId")
 	if err != nil {
 		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
 		return
 	}
 
-	var req user.User
-	err = web.UnmarshalJSON(r, &req)
+	userToAddMoney := &user.User{}
+	err = web.UnmarshalJSON(r, &userToAddMoney)
 	if err != nil {
 		web.RespondError(w, errors.NewHTTPError("Unable to parse request body", http.StatusBadRequest))
 		return
 	}
 
-	if req.Wallet <= 0 {
-		web.RespondError(w, errors.NewValidationError("Amount must be greater than zero"))
+	userIdFromToken, err := security.ExtractUserIDFromToken(r)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
 		return
 	}
+	userToAddMoney.ID = userIdFromToken
 
-	err = controller.UserService.AddAmountToWalllet(userId, req.Wallet)
+	err = controller.UserService.AddAmountToWalllet(userIdFromUrl, userToAddMoney)
 	if err != nil {
 		controller.log.Error(err.Error())
 		web.RespondError(w, err)
@@ -305,7 +308,10 @@ func (controller *UserController) WithdrawAmountFromWallet(w http.ResponseWriter
 }
 
 func (controller *UserController) GetAllTransactions(w http.ResponseWriter, r *http.Request) {
+	transactions := []transaction.Transaction{}
+	var totalCount int
 	parser := web.NewParser(r)
+	query := r.URL.Query()
 
 	userId, err := parser.GetUUID("userId")
 	if err != nil {
@@ -313,21 +319,30 @@ func (controller *UserController) GetAllTransactions(w http.ResponseWriter, r *h
 		return
 	}
 
-	query := r.URL.Query()
-	page, _ := strconv.Atoi(query.Get("page"))
-	pageSize, _ := strconv.Atoi(query.Get("pageSize"))
+	// page, _ := strconv.Atoi(query.Get("page"))
+	// pageSize, _ := strconv.Atoi(query.Get("pageSize"))
 
-	if page <= 0 {
-		page = 1
+	// if page <= 0 {
+	// 	page = 1
+	// }
+	// if pageSize <= 0 {
+	// 	pageSize = 10
+	// }
+
+	limitStr := query.Get("limit")
+	offsetStr := query.Get("offset")
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 5
 	}
-	if pageSize <= 0 {
-		pageSize = 10
+
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
+		offset = 0
 	}
 
-	transactions := []transaction.Transaction{}
-	var totalCount int
-
-	err = controller.UserService.GetAllTransactions(&transactions, &totalCount, page, pageSize, userId)
+	err = controller.UserService.GetAllTransactions(&transactions, &totalCount, limit, offset, userId)
 	if err != nil {
 		web.RespondError(w, err)
 		return
@@ -366,4 +381,8 @@ func (controller *UserController) getSubscription(w http.ResponseWriter, r *http
 	}
 
 	web.RespondJSONWithXTotalCount(w, http.StatusOK, totalCount, subscriptions)
+}
+
+func (controller *UserController) RenewUrlsByUser(w http.ResponseWriter, r *http.Request) {
+
 }

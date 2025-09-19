@@ -58,9 +58,9 @@ func (controller *SubscriptionController) setSubscriptionPrice(w http.ResponseWr
 		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
 		return
 	}
-	subscriptionPrices.UserId = userIdFromURL
+	// subscriptionPrices.UserId = userIdFromURL
 
-	err = controller.SubscriptionService.SetPrice(&subscriptionPrices)
+	err = controller.SubscriptionService.SetPrice(&subscriptionPrices, userIdFromURL)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

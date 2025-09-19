@@ -35,6 +35,7 @@ func (service *TransactionService) CreateTransaction(uow *repository.UnitOfWork,
 		Amount: amount,
 		UserID: user.ID,
 	}
+	transaction.CreatedBy = userId
 
 	err = service.repository.Add(uow, transaction)
 	if err != nil {

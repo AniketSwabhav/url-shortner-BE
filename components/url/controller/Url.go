@@ -33,9 +33,9 @@ func (urlController *UrlController) RegisterRoutes(router *mux.Router) {
 	urlRouter.HandleFunc("/url", urlController.registerUrl).Methods(http.MethodPost)
 	urlRouter.HandleFunc("/url", urlController.getAllUrls).Methods(http.MethodGet)
 	urlRouter.HandleFunc("/url/short-url", urlController.getUrlByShortUrl).Methods(http.MethodPost)
-	urlRouter.HandleFunc("/url/{urlId}", urlController.getUrl).Methods(http.MethodGet)
-	urlRouter.HandleFunc("/url/{urlId}", urlController.updateUrl).Methods(http.MethodPut)
-	urlRouter.HandleFunc("/url/{urlId}", urlController.deleteUrl).Methods(http.MethodDelete)
+	urlRouter.HandleFunc("/url/{urlId}", urlController.getUrlById).Methods(http.MethodGet)
+	urlRouter.HandleFunc("/url/{urlId}", urlController.updateUrlById).Methods(http.MethodPut)
+	urlRouter.HandleFunc("/url/{urlId}", urlController.deleteUrlById).Methods(http.MethodDelete)
 	urlRouter.HandleFunc("/url/{urlId}/renew-visits", urlController.renewUrlVisits).Methods(http.MethodPost)
 
 	urlRouter.Use(security.MiddlewareUrl)
@@ -106,17 +106,23 @@ func (controller *UrlController) getAllUrls(w http.ResponseWriter, r *http.Reque
 
 func (controller *UrlController) getUrlByShortUrl(w http.ResponseWriter, r *http.Request) {}
 
-func (controller *UrlController) getUrl(w http.ResponseWriter, r *http.Request) {}
+func (controller *UrlController) getUrlById(w http.ResponseWriter, r *http.Request) {}
 
-func (controller *UrlController) updateUrl(w http.ResponseWriter, r *http.Request) {}
+func (controller *UrlController) updateUrlById(w http.ResponseWriter, r *http.Request) {}
 
-func (controller *UrlController) deleteUrl(w http.ResponseWriter, r *http.Request) {}
+func (controller *UrlController) deleteUrlById(w http.ResponseWriter, r *http.Request) {}
 
 func (controller *UrlController) renewUrlVisits(w http.ResponseWriter, r *http.Request) {
 	urlToRenew := &url.Url{}
 	parser := web.NewParser(r)
 
-	urlIdFromURL, err := parser.GetUUID("userId")
+	err := web.UnmarshalJSON(r, &urlToRenew)
+	if err != nil {
+		web.RespondError(w, errors.NewHTTPError("unable to parse requested data", http.StatusBadRequest))
+		return
+	}
+
+	urlIdFromURL, err := parser.GetUUID("urlId")
 	if err != nil {
 		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
 		return
@@ -129,15 +135,9 @@ func (controller *UrlController) renewUrlVisits(w http.ResponseWriter, r *http.R
 		web.RespondError(w, err)
 		return
 	}
+	urlToRenew.UpdatedBy = urlToRenew.UserID
 
-	var numVisits int
-	err = web.UnmarshalJSON(r, &numVisits)
-	if err != nil {
-		web.RespondError(w, errors.NewHTTPError("unable to parse requested data", http.StatusBadRequest))
-		return
-	}
-
-	err = controller.UrlService.RenewUrlVisits(urlToRenew, numVisits)
+	err = controller.UrlService.RenewUrlVisits(urlToRenew)
 	if err != nil {
 		web.RespondError(w, err)
 		return

@@ -18,10 +18,11 @@ type UrlService struct {
 	transactionservice *transactionserv.TransactionService
 }
 
-func NewUrlService(DB *gorm.DB, repo repository.Repository) *UrlService {
+func NewUrlService(DB *gorm.DB, repo repository.Repository, txService *transactionserv.TransactionService) *UrlService {
 	return &UrlService{
-		db:         DB,
-		repository: repo,
+		db:                 DB,
+		repository:         repo,
+		transactionservice: txService,
 	}
 }
 
@@ -111,12 +112,12 @@ func (service *UrlService) RedirectUrl(shortUrl string) (string, error) {
 	return url.LongUrl, nil
 }
 
-func (service *UrlService) RenewUrlVisits(urlToRenew *url.Url, numVisits int) error {
+func (service *UrlService) RenewUrlVisits(urlToRenew *url.Url) error {
 
 	uow := repository.NewUnitOfWork(service.db, true)
 	defer uow.RollBack()
 
-	if numVisits <= 0 {
+	if urlToRenew.Visits <= 0 {
 		return errors.NewValidationError("number of visits should be a positive integer")
 	}
 
@@ -125,8 +126,12 @@ func (service *UrlService) RenewUrlVisits(urlToRenew *url.Url, numVisits int) er
 		return errors.NewDatabaseError("unable to find url owner")
 	}
 
-	tempuser := &user.User{}
-	if err := service.repository.GetRecord(uow, tempuser, repository.Filter("id = ? And user_id = ?", urlToRenew.ID, urlToRenew.UserID)); err != nil {
+	if urlOwner.ID != urlToRenew.UserID {
+		return errors.NewUnauthorizedError("you are not authorized to renew url for this user")
+	}
+
+	tempUrl := &url.Url{}
+	if err := service.repository.GetRecord(uow, tempUrl, repository.Filter("id = ? And user_id = ?", urlToRenew.ID, urlToRenew.UserID)); err != nil {
 		return errors.NewValidationError("no url found for this user with given url id")
 	}
 
@@ -135,14 +140,14 @@ func (service *UrlService) RenewUrlVisits(urlToRenew *url.Url, numVisits int) er
 		return err
 	}
 
-	totalPriceToRenew := float32(numVisits) * subscription.PerUrlPrice
+	totalPriceToRenew := float32(urlToRenew.Visits) * subscription.ExtraVisitPrice
 
 	if urlOwner.Wallet < totalPriceToRenew {
 		return errors.NewValidationError("insufficient balance in wallet, please add money to wallet")
 	}
 
 	urlOwner.Wallet -= totalPriceToRenew
-	urlToRenew.Visits += numVisits
+	// urlToRenew.Visits += numVisits
 
 	if err := service.repository.UpdateWithMap(uow, urlOwner, map[string]interface{}{"wallet": urlOwner.Wallet}); err != nil {
 		uow.RollBack()

@@ -7,6 +7,7 @@ import (
 	"url-shortner-be/module/repository"
 
 	"github.com/jinzhu/gorm"
+	uuid "github.com/satori/go.uuid"
 )
 
 type SubscriptionService struct {
@@ -21,13 +22,13 @@ func NewSubscriptionService(DB *gorm.DB, repo repository.Repository) *Subscripti
 	}
 }
 
-func (service *SubscriptionService) SetPrice(subscriptionPrices *subscription.Subscription) error {
+func (service *SubscriptionService) SetPrice(subscriptionPrices *subscription.Subscription, userId uuid.UUID) error {
 
 	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
 
 	foundUser := &user.User{}
-	if err := service.repository.GetRecord(uow, foundUser, repository.Filter("id = ?", subscriptionPrices.UserId)); err != nil {
+	if err := service.repository.GetRecord(uow, foundUser, repository.Filter("id = ?", userId)); err != nil {
 		uow.RollBack()
 		return err
 	}
