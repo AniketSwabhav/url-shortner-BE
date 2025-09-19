@@ -38,7 +38,7 @@ func (urlController *UrlController) RegisterRoutes(router *mux.Router) {
 	urlRouter.HandleFunc("/url/{urlId}", urlController.deleteUrlById).Methods(http.MethodDelete)
 	urlRouter.HandleFunc("/url/{urlId}/renew-visits", urlController.renewUrlVisits).Methods(http.MethodPost)
 
-	urlRouter.Use(security.MiddlewareUrl)
+	urlRouter.Use(security.MiddlewareUser)
 
 }
 

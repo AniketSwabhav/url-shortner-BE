@@ -18,17 +18,14 @@ func NewSubscriptionModuleConfig(db *gorm.DB) *SubscriptionModuleConfig {
 
 func (c *SubscriptionModuleConfig) MigrateTables() {
 
-	var models = []interface{}{
-		&Subscription{},
+	model := &Subscription{}
+
+	err := c.DB.AutoMigrate(model).Error
+	if err != nil {
+		log.NewLog().Print("Auto Migrating Subscription ==> %s", err)
 	}
 
-	for _, model := range models {
-		if err := c.DB.AutoMigrate(model).Error; err != nil {
-			log.GetLogger().Print("Auto Migration ==> %s", err)
-		}
-	}
-
-	err := c.DB.Model(&Subscription{}).AddForeignKey("user_id", "users(id)", "CASCADE", "CASCADE").Error
+	err = c.DB.Model(&Subscription{}).AddForeignKey("user_id", "users(id)", "CASCADE", "CASCADE").Error
 	if err != nil {
 		log.GetLogger().Print("Foreign Key Constraints Of Subscription ==> %s", err)
 	}
