@@ -3,6 +3,7 @@ package controller
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"url-shortner-be/components/errors"
 	"url-shortner-be/components/log"
 	"url-shortner-be/components/security"
@@ -31,7 +32,7 @@ func (urlController *UrlController) RegisterRoutes(router *mux.Router) {
 	urlRouter := router.PathPrefix("/user/{userId}").Subrouter()
 
 	urlRouter.HandleFunc("/url", urlController.registerUrl).Methods(http.MethodPost)
-	urlRouter.HandleFunc("/url", urlController.getAllUrls).Methods(http.MethodGet)
+	urlRouter.HandleFunc("/url", urlController.getAllUrlsByUserId).Methods(http.MethodGet)
 	urlRouter.HandleFunc("/url/short-url", urlController.getUrlByShortUrl).Methods(http.MethodPost)
 	urlRouter.HandleFunc("/url/{urlId}", urlController.getUrlById).Methods(http.MethodGet)
 	urlRouter.HandleFunc("/url/{urlId}", urlController.updateUrlById).Methods(http.MethodPut)
@@ -100,17 +101,125 @@ func (controller *UrlController) redirectUrl(w http.ResponseWriter, r *http.Requ
 	fmt.Println("Redirected to: ", longUrl)
 }
 
-//---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+func (controller *UrlController) getAllUrlsByUserId(w http.ResponseWriter, r *http.Request) {
+	allUrl := &[]url.UrlDTO{}
+	parser := web.NewParser(r)
+	var totalCount int
+	query := r.URL.Query()
 
-func (controller *UrlController) getAllUrls(w http.ResponseWriter, r *http.Request) {}
+	limitStr := query.Get("limit")
+	offsetStr := query.Get("offset")
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 5
+	}
+
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
+		offset = 0
+	}
+
+	userIdFromURL, err := parser.GetUUID("userId")
+	if err != nil {
+		web.RespondError(w, errors.NewValidationError("Invalid User ID format"))
+		return
+	}
+
+	userIdFromToken, err := security.ExtractUserIDFromToken(r)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
+	if userIdFromToken != userIdFromURL {
+		web.RespondError(w, errors.NewUnauthorizedError("you are not authorized to view URLs of this user"))
+		return
+	}
+
+	if err = controller.UrlService.GetAllUrls(allUrl, userIdFromURL, &totalCount, limit, offset); err != nil {
+		controller.log.Print(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
+	web.RespondJSONWithXTotalCount(w, http.StatusOK, totalCount, allUrl)
+
+}
+
+func (controller *UrlController) getUrlById(w http.ResponseWriter, r *http.Request) {
+	var targetURL = &url.UrlDTO{}
+
+	parser := web.NewParser(r)
+
+	userIdFromURL, err := parser.GetUUID("userId")
+	if err != nil {
+		web.RespondError(w, errors.NewValidationError("Invalid User ID format"))
+		return
+	}
+
+	urlIdFromURL, err := parser.GetUUID("urlId")
+	if err != nil {
+		web.RespondError(w, errors.NewValidationError("Invalid URL ID format"))
+		return
+	}
+	targetURL.ID = urlIdFromURL
+
+	userIdFromToken, err := security.ExtractUserIDFromToken(r)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+	targetURL.UserID = userIdFromToken
+
+	if userIdFromToken != userIdFromURL {
+		web.RespondError(w, errors.NewUnauthorizedError("you are not authorized to view this URL"))
+		return
+	}
+
+	err = controller.UrlService.GetUrlByID(targetURL)
+	if err != nil {
+		web.RespondError(w, err)
+		return
+	}
+
+	web.RespondJSON(w, http.StatusOK, targetURL)
+}
 
 func (controller *UrlController) getUrlByShortUrl(w http.ResponseWriter, r *http.Request) {}
 
-func (controller *UrlController) getUrlById(w http.ResponseWriter, r *http.Request) {}
-
 func (controller *UrlController) updateUrlById(w http.ResponseWriter, r *http.Request) {}
 
-func (controller *UrlController) deleteUrlById(w http.ResponseWriter, r *http.Request) {}
+func (controller *UrlController) deleteUrlById(w http.ResponseWriter, r *http.Request) {
+	parser := web.NewParser(r)
+
+	urlID, err := parser.GetUUID("urlId")
+	if err != nil {
+		web.RespondError(w, errors.NewValidationError("Invalid URL ID format"))
+		return
+	}
+
+	deletedBy, err := security.ExtractUserIDFromToken(r)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
+	err = controller.UrlService.Delete(urlID, deletedBy)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
+	web.RespondJSON(w, http.StatusOK, map[string]string{
+		"message": "URL deleted successfully",
+	})
+}
 
 func (controller *UrlController) renewUrlVisits(w http.ResponseWriter, r *http.Request) {
 	urlToRenew := &url.Url{}

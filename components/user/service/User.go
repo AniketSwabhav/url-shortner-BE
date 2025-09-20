@@ -1,7 +1,7 @@
 package service
 
 import (
-	"fmt"
+	"net/http"
 	"time"
 	"url-shortner-be/components/errors"
 	"url-shortner-be/components/security"
@@ -54,7 +54,7 @@ func (service *UserService) CreateAdmin(newUser *user.User) error {
 
 	hashedPassword, err := hashPassword(newUser.Credentials.Password)
 	if err != nil {
-		return fmt.Errorf("failed to hash password: %w", err)
+		return errors.NewHTTPError("failed to hash password", http.StatusInternalServerError)
 	}
 	newUser.Credentials.Password = string(hashedPassword)
 
@@ -80,7 +80,7 @@ func (service *UserService) CreateUser(newUser *user.User) error {
 
 	hashedPassword, err := hashPassword(newUser.Credentials.Password)
 	if err != nil {
-		return fmt.Errorf("failed to hash password: %w", err)
+		return errors.NewHTTPError("failed to hash password", http.StatusInternalServerError)
 	}
 	newUser.Credentials.Password = string(hashedPassword)
 
@@ -88,7 +88,7 @@ func (service *UserService) CreateUser(newUser *user.User) error {
 	err = service.repository.GetRecord(uow, &subscription)
 	if err != nil {
 		uow.RollBack()
-		return err
+		return errors.NewDatabaseError("unable to fetch subscription details")
 	}
 	newUser.UrlCount = subscription.FreeShortUrls
 
@@ -146,9 +146,10 @@ func (service *UserService) GetUserByID(targetUser *user.UserDTO) error {
 
 	err := service.repository.GetRecordByID(uow, targetUser.ID, targetUser, repository.PreloadAssociations([]string{"Credentials", "Url", "Transactions"}))
 	if err != nil {
-		return err
+		return errors.NewDatabaseError("error getting user data")
 	}
 
+	uow.Commit()
 	return nil
 }
 
@@ -162,7 +163,7 @@ func (service *UserService) GetAllUsers(allUsers *[]user.UserDTO, totalCount *in
 		repository.PreloadAssociations([]string{"Credentials", "Url", "Transactions"}),
 		repository.Paginate(limit, offset, totalCount))
 	if err != nil {
-		return err
+		return errors.NewDatabaseError("error getting all users")
 	}
 
 	err = service.repository.GetCount(uow, allUsers, totalCount)
@@ -186,7 +187,7 @@ func (service *UserService) UpdateUser(targetUser *user.User) error {
 	targetUser.UpdatedAt = time.Now()
 
 	if err := service.repository.Update(uow, targetUser, repository.Filter("id = ?", targetUser.ID)); err != nil {
-		return err
+		return errors.NewDatabaseError("unable to update user")
 	}
 
 	uow.Commit()
@@ -207,14 +208,14 @@ func (service *UserService) Delete(userID uuid.UUID, deletedBy uuid.UUID) error 
 		"deleted_at": now,
 		"deleted_by": deletedBy,
 	}, repository.Filter("id = ?", userID)); err != nil {
-		return err
+		return errors.NewDatabaseError("unable to delete user")
 	}
 
 	if err := service.repository.UpdateWithMap(uow, &credential.Credential{}, map[string]interface{}{
 		"deleted_at": now,
 		"deleted_by": deletedBy,
 	}, repository.Filter("user_id = ?", userID)); err != nil {
-		return err
+		return errors.NewDatabaseError("unable to delete credentials")
 	}
 
 	uow.Commit()
@@ -319,7 +320,7 @@ func (service *UserService) GetAllTransactions(transactions *[]transaction.Trans
 		repository.Paginate(limit, offset, totalCount),
 		repository.Order("created_at desc"),
 	); err != nil {
-		return err
+		return errors.NewDatabaseError("unable to fetch transactions for this user")
 	}
 
 	uow.Commit()
@@ -335,7 +336,7 @@ func (service *UserService) GetSubscription(subscriptions *[]subscription.Subscr
 	defer uow.RollBack()
 
 	if err := service.repository.GetAll(uow, subscriptions, repository.Filter("user_id = ?", userID), repository.Paginate(limit, offset, totalCount), repository.Order("created_at desc")); err != nil {
-		return err
+		return errors.NewDatabaseError("unable to fetch subscriptions for this user")
 	}
 
 	uow.Commit()
@@ -366,7 +367,7 @@ func (service *UserService) RenewUrls(userToUpdate *user.User) error {
 
 	subscription := &subscription.Subscription{}
 	if err := service.repository.GetRecord(uow, &subscription, repository.Order("created_at desc")); err != nil {
-		return err
+		return errors.NewDatabaseError("unable to fetch subscription details")
 	}
 
 	totalPriceToRenew := float32(userToUpdate.UrlCount) * subscription.NewUrlPrice
@@ -390,7 +391,7 @@ func (service *UserService) RenewUrls(userToUpdate *user.User) error {
 
 	if err := service.transactionservice.CreateTransaction(uow, existingUser.ID, totalPriceToRenew); err != nil {
 		uow.RollBack()
-		return err
+		return errors.NewDatabaseError("unable to create transaction")
 	}
 
 	uow.Commit()

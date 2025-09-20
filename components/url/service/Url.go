@@ -1,6 +1,7 @@
 package service
 
 import (
+	"time"
 	"url-shortner-be/components/errors"
 	transactionserv "url-shortner-be/components/transaction/service"
 	"url-shortner-be/model/subscription"
@@ -43,7 +44,7 @@ func (service *UrlService) CreateUrl(userId uuid.UUID, urlOwner *user.User, newU
 
 	subscription := &subscription.Subscription{}
 	if err := service.repository.GetRecord(uow, &subscription, repository.Order("created_at desc")); err != nil {
-		return err
+		return errors.NewDatabaseError("unable to fetch subscription details")
 	}
 
 	newUrl.UserID = foundUser.ID
@@ -70,13 +71,13 @@ func (service *UrlService) CreateUrl(userId uuid.UUID, urlOwner *user.User, newU
 
 	if err := service.repository.Add(uow, &newUrl); err != nil {
 		uow.RollBack()
-		return err
+		return errors.NewDatabaseError("unable to create new url")
 	}
 
 	foundUser.UrlCount--
 
 	if err := service.repository.UpdateWithMap(uow, foundUser, map[string]interface{}{"url_count": foundUser.UrlCount}); err != nil {
-		return err
+		return errors.NewDatabaseError("unable to update user url count")
 	}
 
 	uow.Commit()
@@ -137,7 +138,7 @@ func (service *UrlService) RenewUrlVisits(urlToRenew *url.Url) error {
 
 	subscription := &subscription.Subscription{}
 	if err := service.repository.GetRecord(uow, &subscription, repository.Order("created_at desc")); err != nil {
-		return err
+		return errors.NewDatabaseError("unable to fetch subscription details")
 	}
 
 	totalPriceToRenew := float32(urlToRenew.Visits) * subscription.ExtraVisitPrice
@@ -154,7 +155,7 @@ func (service *UrlService) RenewUrlVisits(urlToRenew *url.Url) error {
 		"wallet": urlOwner.Wallet,
 	}); err != nil {
 		uow.RollBack()
-		return err
+		return errors.NewDatabaseError("unable to update wallet balance")
 	}
 
 	if err := service.repository.UpdateWithMap(uow, existingUrl, map[string]interface{}{
@@ -162,14 +163,76 @@ func (service *UrlService) RenewUrlVisits(urlToRenew *url.Url) error {
 		"updated_by": urlToRenew.UserID,
 	}); err != nil {
 		uow.RollBack()
-		return err
+		return errors.NewDatabaseError("unable to renew url visits")
 	}
 
 	if err := service.transactionservice.CreateTransaction(uow, urlOwner.ID, totalPriceToRenew); err != nil {
 		uow.RollBack()
+		return errors.NewDatabaseError("unable to create transaction")
+	}
+
+	uow.Commit()
+	return nil
+}
+
+func (service *UrlService) GetAllUrls(allUrl *[]url.UrlDTO, userId uuid.UUID, totalCount *int, limit, offset int) error {
+
+	uow := repository.NewUnitOfWork(service.db, true)
+	defer uow.RollBack()
+
+	if err := service.repository.GetAll(uow, allUrl, repository.Filter("user_id = ?", userId), repository.Paginate(limit, offset, totalCount)); err != nil {
+		return errors.NewDatabaseError("error in fetching urls of user")
+	}
+
+	if err := service.repository.GetCount(uow, allUrl, totalCount, repository.Filter("user_id = ?", userId)); err != nil {
 		return err
 	}
 
 	uow.Commit()
+	return nil
+}
+
+func (service *UrlService) GetUrlByID(targetURL *url.UrlDTO) error {
+
+	if err := service.doesUrlExist(targetURL.ID); err != nil {
+		return err
+	}
+
+	uow := repository.NewUnitOfWork(service.db, true)
+	defer uow.RollBack()
+
+	if err := service.repository.GetRecord(uow, targetURL, repository.Filter("id = ? And user_id = ?", targetURL.ID, targetURL.UserID)); err != nil {
+		return errors.NewDatabaseError("no url found for this user with given url id")
+	}
+
+	return nil
+}
+
+func (service *UrlService) Delete(urlID uuid.UUID, deletedBy uuid.UUID) error {
+	if err := service.doesUrlExist(urlID); err != nil {
+		return err
+	}
+
+	uow := repository.NewUnitOfWork(service.db, false)
+	defer uow.RollBack()
+
+	now := time.Now()
+
+	if err := service.repository.UpdateWithMap(uow, &url.Url{}, map[string]interface{}{
+		"deleted_at": now,
+		"deleted_by": deletedBy,
+	}, repository.Filter("id = ?", urlID)); err != nil {
+		return errors.NewDatabaseError("unable to delete url")
+	}
+
+	uow.Commit()
+	return nil
+}
+
+func (service *UrlService) doesUrlExist(urlID uuid.UUID) error {
+	var u url.Url
+	if err := service.db.First(&u, "id = ?", urlID).Error; err != nil {
+		return errors.NewValidationError("URL ID is invalid")
+	}
 	return nil
 }
