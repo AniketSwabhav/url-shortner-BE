@@ -45,16 +45,16 @@ func (userController *UserController) RegisterRoutes(router *mux.Router) {
 	unguardedRouter.HandleFunc("/register-user", userController.registerUser).Methods(http.MethodPost)
 	unguardedRouter.HandleFunc("/register-admin", userController.registerAdmin).Methods(http.MethodPost)
 
-	userguardedRouter.HandleFunc("/{userId}/wallet/add", userController.AddAmountToWallet).Methods(http.MethodPost)
-	userguardedRouter.HandleFunc("/{userId}/wallet/withdraw", userController.WithdrawAmountFromWallet).Methods(http.MethodPost)
-	// userguardedRouter.HandleFunc("/{userId}/renew-urls", userController.RenewUrlsByUserId).Methods(http.MethodPost)
+	userguardedRouter.HandleFunc("/{userId}/wallet/add", userController.addAmountToWallet).Methods(http.MethodPost)
+	userguardedRouter.HandleFunc("/{userId}/wallet/withdraw", userController.withdrawAmountFromWallet).Methods(http.MethodPost)
+	userguardedRouter.HandleFunc("/{userId}/renew-urls", userController.renewUrlsByUserId).Methods(http.MethodPost)
+	userguardedRouter.HandleFunc("/{userId}/transactions", userController.getTransactionByUserId).Methods(http.MethodGet)
 	// userguardedRouter.HandleFunc("/{userId}/amount", userController.GetAmount).Methods(http.MethodGet)
 
-	adminguardedRouter.HandleFunc("/", userController.GetAllUsers).Methods(http.MethodGet)
-	adminguardedRouter.HandleFunc("/{userId}", userController.GetUserByID).Methods(http.MethodGet)
-	adminguardedRouter.HandleFunc("/{userId}", userController.UpdateUserById).Methods(http.MethodPut)
+	adminguardedRouter.HandleFunc("/", userController.getAllUsers).Methods(http.MethodGet)
+	adminguardedRouter.HandleFunc("/{userId}", userController.getUserByID).Methods(http.MethodGet)
+	adminguardedRouter.HandleFunc("/{userId}", userController.updateUserById).Methods(http.MethodPut)
 	adminguardedRouter.HandleFunc("/{userId}", userController.deleteUserById).Methods(http.MethodDelete)
-	adminguardedRouter.HandleFunc("/{userId}/transactions", userController.GetAllTransactions).Methods(http.MethodGet)
 	adminguardedRouter.HandleFunc("/{userId}/subcription", userController.getSubscription).Methods(http.MethodGet)
 
 	userguardedRouter.Use(security.MiddlewareUser)
@@ -138,7 +138,7 @@ func (controller *UserController) login(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-func (controller *UserController) GetUserByID(w http.ResponseWriter, r *http.Request) {
+func (controller *UserController) getUserByID(w http.ResponseWriter, r *http.Request) {
 	var targetUser = &user.UserDTO{}
 
 	parser := web.NewParser(r)
@@ -159,7 +159,7 @@ func (controller *UserController) GetUserByID(w http.ResponseWriter, r *http.Req
 	web.RespondJSON(w, http.StatusOK, targetUser)
 }
 
-func (controller *UserController) UpdateUserById(w http.ResponseWriter, r *http.Request) {
+func (controller *UserController) updateUserById(w http.ResponseWriter, r *http.Request) {
 	var targetUser = &user.User{}
 	parser := web.NewParser(r)
 
@@ -198,7 +198,7 @@ func (controller *UserController) UpdateUserById(w http.ResponseWriter, r *http.
 	})
 }
 
-func (controller *UserController) GetAllUsers(w http.ResponseWriter, r *http.Request) {
+func (controller *UserController) getAllUsers(w http.ResponseWriter, r *http.Request) {
 	allUsers := &[]user.UserDTO{}
 	var totalCount int
 	query := r.URL.Query()
@@ -253,7 +253,7 @@ func (controller *UserController) deleteUserById(w http.ResponseWriter, r *http.
 	})
 }
 
-func (controller *UserController) AddAmountToWallet(w http.ResponseWriter, r *http.Request) {
+func (controller *UserController) addAmountToWallet(w http.ResponseWriter, r *http.Request) {
 	parser := web.NewParser(r)
 
 	userIdFromUrl, err := parser.GetUUID("userId")
@@ -289,7 +289,7 @@ func (controller *UserController) AddAmountToWallet(w http.ResponseWriter, r *ht
 	})
 }
 
-func (controller *UserController) WithdrawAmountFromWallet(w http.ResponseWriter, r *http.Request) {
+func (controller *UserController) withdrawAmountFromWallet(w http.ResponseWriter, r *http.Request) {
 	parser := web.NewParser(r)
 
 	userId, err := parser.GetUUID("userId")
@@ -322,27 +322,29 @@ func (controller *UserController) WithdrawAmountFromWallet(w http.ResponseWriter
 	})
 }
 
-func (controller *UserController) GetAllTransactions(w http.ResponseWriter, r *http.Request) {
+func (controller *UserController) getTransactionByUserId(w http.ResponseWriter, r *http.Request) {
 	transactions := []transaction.Transaction{}
 	var totalCount int
 	parser := web.NewParser(r)
 	query := r.URL.Query()
 
-	userId, err := parser.GetUUID("userId")
+	userIdFromUrl, err := parser.GetUUID("userId")
 	if err != nil {
 		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
 		return
 	}
 
-	// page, _ := strconv.Atoi(query.Get("page"))
-	// pageSize, _ := strconv.Atoi(query.Get("pageSize"))
+	userIdFromToken, err := security.ExtractUserIDFromToken(r)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
 
-	// if page <= 0 {
-	// 	page = 1
-	// }
-	// if pageSize <= 0 {
-	// 	pageSize = 10
-	// }
+	if userIdFromToken != userIdFromUrl {
+		web.RespondError(w, errors.NewUnauthorizedError("you are not authorized to view transactions for this user"))
+		return
+	}
 
 	limitStr := query.Get("limit")
 	offsetStr := query.Get("offset")
@@ -357,7 +359,7 @@ func (controller *UserController) GetAllTransactions(w http.ResponseWriter, r *h
 		offset = 0
 	}
 
-	err = controller.UserService.GetAllTransactions(&transactions, &totalCount, limit, offset, userId)
+	err = controller.UserService.GetAllTransactions(&transactions, &totalCount, limit, offset, userIdFromUrl)
 	if err != nil {
 		web.RespondError(w, err)
 		return
@@ -367,7 +369,12 @@ func (controller *UserController) GetAllTransactions(w http.ResponseWriter, r *h
 }
 
 func (controller *UserController) getSubscription(w http.ResponseWriter, r *http.Request) {
+
+	subscriptions := []subscription.Subscription{}
+
+	var totalCount int
 	parser := web.NewParser(r)
+	query := r.URL.Query()
 
 	userId, err := parser.GetUUID("userId")
 	if err != nil {
@@ -375,21 +382,20 @@ func (controller *UserController) getSubscription(w http.ResponseWriter, r *http
 		return
 	}
 
-	query := r.URL.Query()
-	page, _ := strconv.Atoi(query.Get("page"))
-	pageSize, _ := strconv.Atoi(query.Get("pageSize"))
+	limitStr := query.Get("limit")
+	offsetStr := query.Get("offset")
 
-	if page <= 0 {
-		page = 1
-	}
-	if pageSize <= 0 {
-		pageSize = 5
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 5
 	}
 
-	subscriptions := []subscription.Subscription{}
-	var totalCount int
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
+		offset = 0
+	}
 
-	err = controller.UserService.GetAllSubscription(&subscriptions, &totalCount, page, pageSize, userId)
+	err = controller.UserService.GetSubscription(&subscriptions, &totalCount, limit, offset, userId)
 	if err != nil {
 		web.RespondError(w, err)
 		return
@@ -398,6 +404,35 @@ func (controller *UserController) getSubscription(w http.ResponseWriter, r *http
 	web.RespondJSONWithXTotalCount(w, http.StatusOK, totalCount, subscriptions)
 }
 
-func (controller *UserController) RenewUrlsByUser(w http.ResponseWriter, r *http.Request) {
+func (controller *UserController) renewUrlsByUserId(w http.ResponseWriter, r *http.Request) {
+	userToUpdate := user.User{}
+	parser := web.NewParser(r)
 
+	err := web.UnmarshalJSON(r, &userToUpdate)
+	if err != nil {
+		web.RespondError(w, errors.NewHTTPError("unable to parse requested data", http.StatusBadRequest))
+		return
+	}
+
+	userToUpdate.ID, err = parser.GetUUID("userId")
+	if err != nil {
+		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
+		return
+	}
+
+	userToUpdate.UpdatedBy, err = security.ExtractUserIDFromToken(r)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
+	if err = controller.UserService.RenewUrls(&userToUpdate); err != nil {
+		web.RespondError(w, err)
+		return
+	}
+
+	web.RespondJSON(w, http.StatusOK, map[string]string{
+		"message": "Urls Renewed Successfully",
+	})
 }

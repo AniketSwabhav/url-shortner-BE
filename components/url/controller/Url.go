@@ -144,7 +144,7 @@ func (controller *UrlController) renewUrlVisits(w http.ResponseWriter, r *http.R
 	}
 
 	web.RespondJSON(w, http.StatusOK, map[string]string{
-		"message": "Url Renewed Successfully",
+		"message": "Url Visits Renewed Successfully",
 	})
 
 }

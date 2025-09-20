@@ -22,13 +22,13 @@ func MiddlewareAdmin(next http.Handler) http.Handler {
 
 		if !claim.IsAdmin {
 			fmt.Println("User is not Admin")
-			web.RespondError(w, errors.NewUnauthorizedError("Current user not an admin"))
+			web.RespondError(w, errors.NewUnauthorizedError("Only admin can this resource"))
 			return
 		}
 
 		if !claim.IsActive {
 			fmt.Println("User is not Active")
-			web.RespondError(w, errors.NewInActiveUserError("current user is not active"))
+			web.RespondError(w, errors.NewInActiveUserError("Only active admin can access this resource"))
 			return
 		}
 
@@ -51,13 +51,13 @@ func MiddlewareUser(next http.Handler) http.Handler {
 
 		if claim.IsAdmin {
 			fmt.Println("User is not Admin")
-			web.RespondError(w, errors.NewUnauthorizedError("admin cannot access user"))
+			web.RespondError(w, errors.NewUnauthorizedError("Only non-admin user can access this resource"))
 			return
 		}
 
 		if !claim.IsActive {
 			fmt.Println("User is not Active")
-			web.RespondError(w, errors.NewInActiveUserError("current user is not active"))
+			web.RespondError(w, errors.NewInActiveUserError("Only active user can access this resource"))
 			return
 		}
 
@@ -79,7 +79,7 @@ func MiddlewareCommon(next http.Handler) http.Handler {
 
 		if !claim.IsActive {
 			fmt.Println("User is not Active")
-			web.RespondError(w, errors.NewInActiveUserError("Current user is not active"))
+			web.RespondError(w, errors.NewInActiveUserError("Only active user can access this resource"))
 			return
 		}
 

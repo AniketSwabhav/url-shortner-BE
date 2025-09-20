@@ -5,6 +5,7 @@ import (
 	"time"
 	"url-shortner-be/components/errors"
 	"url-shortner-be/components/security"
+	transactionserv "url-shortner-be/components/transaction/service"
 	"url-shortner-be/model/credential"
 	"url-shortner-be/model/subscription"
 	"url-shortner-be/model/transaction"
@@ -21,14 +22,16 @@ import (
 const cost = 10
 
 type UserService struct {
-	db         *gorm.DB
-	repository repository.Repository
+	db                 *gorm.DB
+	repository         repository.Repository
+	transactionservice *transactionserv.TransactionService
 }
 
-func NewUserService(DB *gorm.DB, repo repository.Repository) *UserService {
+func NewUserService(DB *gorm.DB, repo repository.Repository, txService *transactionserv.TransactionService) *UserService {
 	return &UserService{
-		db:         DB,
-		repository: repo,
+		db:                 DB,
+		repository:         repo,
+		transactionservice: txService,
 	}
 }
 
@@ -301,8 +304,9 @@ func (service *UserService) WithdrawAmountFromWallet(userID uuid.UUID, amount fl
 }
 
 func (service *UserService) GetAllTransactions(transactions *[]transaction.Transaction, totalCount *int, limit, offset int, userID uuid.UUID) error {
-	if userID == uuid.Nil {
-		return errors.NewValidationError("User ID is not valid")
+
+	if err := service.doesUserExist(userID); err != nil {
+		return errors.NewDatabaseError("user not found with given id")
 	}
 
 	uow := repository.NewUnitOfWork(service.db, true)
@@ -322,7 +326,7 @@ func (service *UserService) GetAllTransactions(transactions *[]transaction.Trans
 	return nil
 }
 
-func (service *UserService) GetAllSubscription(subscriptions *[]subscription.Subscription, totalCount *int, page, pageSize int, userID uuid.UUID) error {
+func (service *UserService) GetSubscription(subscriptions *[]subscription.Subscription, totalCount *int, limit, offset int, userID uuid.UUID) error {
 	if userID == uuid.Nil {
 		return errors.NewValidationError("User ID is not valid")
 	}
@@ -330,15 +334,62 @@ func (service *UserService) GetAllSubscription(subscriptions *[]subscription.Sub
 	uow := repository.NewUnitOfWork(service.db, true)
 	defer uow.RollBack()
 
-	offset := (page - 1) * pageSize
+	if err := service.repository.GetAll(uow, subscriptions, repository.Filter("user_id = ?", userID), repository.Paginate(limit, offset, totalCount), repository.Order("created_at desc")); err != nil {
+		return err
+	}
 
-	if err := service.repository.GetAll(
-		uow,
-		subscriptions,
-		repository.Filter("user_id = ?", userID),
-		repository.Paginate(pageSize, offset, totalCount),
-		repository.Order("created_at desc"),
-	); err != nil {
+	uow.Commit()
+	return nil
+}
+
+func (service *UserService) RenewUrls(userToUpdate *user.User) error {
+
+	if err := service.doesUserExist(userToUpdate.ID); err != nil {
+		return err
+	}
+
+	uow := repository.NewUnitOfWork(service.db, true)
+	defer uow.RollBack()
+
+	if userToUpdate.UpdatedBy != userToUpdate.ID {
+		return errors.NewUnauthorizedError("you are not authorized to renew urls for this user")
+	}
+
+	if userToUpdate.UrlCount <= 0 {
+		return errors.NewValidationError("number of url renews should be a positive integer")
+	}
+
+	existingUser := &user.User{}
+	if err := service.repository.GetRecordByID(uow, userToUpdate.ID, &existingUser); err != nil {
+		return errors.NewDatabaseError("unable to find user")
+	}
+
+	subscription := &subscription.Subscription{}
+	if err := service.repository.GetRecord(uow, &subscription, repository.Order("created_at desc")); err != nil {
+		return err
+	}
+
+	totalPriceToRenew := float32(userToUpdate.UrlCount) * subscription.NewUrlPrice
+
+	if existingUser.Wallet < totalPriceToRenew {
+		return errors.NewValidationError("insufficient balance in wallet, please add money to wallet")
+	}
+
+	existingUser.Wallet -= totalPriceToRenew
+
+	newUrlCount := userToUpdate.UrlCount + existingUser.UrlCount
+
+	if err := service.repository.UpdateWithMap(uow, existingUser, map[string]interface{}{
+		"wallet":     existingUser.Wallet,
+		"url_count":  newUrlCount,
+		"updated_by": userToUpdate.UpdatedBy,
+	}); err != nil {
+		uow.RollBack()
+		return err
+	}
+
+	if err := service.transactionservice.CreateTransaction(uow, existingUser.ID, totalPriceToRenew); err != nil {
+		uow.RollBack()
 		return err
 	}
 

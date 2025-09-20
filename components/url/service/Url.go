@@ -130,8 +130,8 @@ func (service *UrlService) RenewUrlVisits(urlToRenew *url.Url) error {
 		return errors.NewUnauthorizedError("you are not authorized to renew url for this user")
 	}
 
-	tempUrl := &url.Url{}
-	if err := service.repository.GetRecord(uow, tempUrl, repository.Filter("id = ? And user_id = ?", urlToRenew.ID, urlToRenew.UserID)); err != nil {
+	existingUrl := &url.Url{}
+	if err := service.repository.GetRecord(uow, existingUrl, repository.Filter("id = ? And user_id = ?", urlToRenew.ID, urlToRenew.UserID)); err != nil {
 		return errors.NewValidationError("no url found for this user with given url id")
 	}
 
@@ -147,14 +147,20 @@ func (service *UrlService) RenewUrlVisits(urlToRenew *url.Url) error {
 	}
 
 	urlOwner.Wallet -= totalPriceToRenew
-	// urlToRenew.Visits += numVisits
 
-	if err := service.repository.UpdateWithMap(uow, urlOwner, map[string]interface{}{"wallet": urlOwner.Wallet}); err != nil {
+	newVisitCount := existingUrl.Visits + urlToRenew.Visits
+
+	if err := service.repository.UpdateWithMap(uow, urlOwner, map[string]interface{}{
+		"wallet": urlOwner.Wallet,
+	}); err != nil {
 		uow.RollBack()
 		return err
 	}
 
-	if err := service.repository.UpdateWithMap(uow, urlToRenew, map[string]interface{}{"visits": urlToRenew.Visits}); err != nil {
+	if err := service.repository.UpdateWithMap(uow, existingUrl, map[string]interface{}{
+		"visits":     newVisitCount,
+		"updated_by": urlToRenew.UserID,
+	}); err != nil {
 		uow.RollBack()
 		return err
 	}
