@@ -208,6 +208,28 @@ func (service *UrlService) GetUrlByID(targetURL *url.UrlDTO) error {
 	return nil
 }
 
+func (service *UrlService) UpdateUrl(targetUrl *url.Url) error {
+
+	if err := service.doesUrlExist(targetUrl.ID); err != nil {
+		return err
+	}
+
+	uow := repository.NewUnitOfWork(service.db, false)
+	defer uow.RollBack()
+
+	targetUrl.UpdatedAt = time.Now()
+
+	if err := service.repository.Update(uow, targetUrl, repository.Filter("id = ?", targetUrl.ID)); err != nil {
+		return errors.NewDatabaseError("unable to update url")
+	}
+
+	uow.Commit()
+	return nil
+}
+
+
+
+
 func (service *UrlService) Delete(urlID uuid.UUID, deletedBy uuid.UUID) error {
 	if err := service.doesUrlExist(urlID); err != nil {
 		return err

@@ -191,7 +191,49 @@ func (controller *UrlController) getUrlById(w http.ResponseWriter, r *http.Reque
 
 func (controller *UrlController) getUrlByShortUrl(w http.ResponseWriter, r *http.Request) {}
 
-func (controller *UrlController) updateUrlById(w http.ResponseWriter, r *http.Request) {}
+
+func (controller *UrlController) updateUrlById(w http.ResponseWriter, r *http.Request) {
+    var targetUrl = &url.Url{}
+    parser := web.NewParser(r)
+
+    err := web.UnmarshalJSON(r, &targetUrl)
+    if err != nil {
+        web.RespondError(w, errors.NewHTTPError("Unable to parse request body", http.StatusBadRequest))
+        return
+    }
+
+    if err := targetUrl.Validate(targetUrl.LongUrl); err != nil { 
+        controller.log.Error(err.Error())
+        web.RespondError(w, err)
+        return
+    }
+
+    userIdFromURL, err := parser.GetUUID("userId")
+    if err != nil {
+        web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
+        return
+    }
+    targetUrl.ID = userIdFromURL
+
+    targetUrl.UpdatedBy, err = security.ExtractUserIDFromToken(r)
+    if err != nil {
+        controller.log.Error(err.Error())
+        web.RespondError(w, err)
+        return
+    }
+
+    err = controller.UrlService.UpdateUrl(targetUrl)
+    if err != nil {
+        web.RespondError(w, err)
+        return
+    }
+
+    web.RespondJSON(w, http.StatusOK, map[string]string{
+        "message": "Url updated successfully",
+    })
+}
+
+
 
 func (controller *UrlController) deleteUrlById(w http.ResponseWriter, r *http.Request) {
 	parser := web.NewParser(r)

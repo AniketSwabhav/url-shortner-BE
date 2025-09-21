@@ -44,6 +44,10 @@ func (url *Url) Validate(inputUrl string) error {
 	return nil
 }
 
+
+
+
+
 func GenerateShortUrl() string {
 
 	const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
