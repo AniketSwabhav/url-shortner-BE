@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 	"url-shortner-be/components/errors"
@@ -25,6 +24,12 @@ func NewUrlController(urlService *urlService.UrlService, log log.Logger) *UrlCon
 		log:        log,
 		UrlService: urlService,
 	}
+}
+
+// for short url redirection---------------------------------------------------
+func (controller *UrlController) RegisterRedirectRoute(router *mux.Router) {
+	redirectRouter := router.PathPrefix("/").Subrouter()
+	redirectRouter.HandleFunc("/{short-url}", controller.redirectUrl)
 }
 
 func (urlController *UrlController) RegisterRoutes(router *mux.Router) {
@@ -83,25 +88,31 @@ func (controller *UrlController) registerUrl(w http.ResponseWriter, r *http.Requ
 	web.RespondJSON(w, http.StatusCreated, newUrl)
 }
 
-// for short url redirection---------------------------------------------------
-func (controller *UrlController) RegisterRedirectRoute(router *mux.Router) {
-	redirectRouter := router.PathPrefix("/").Subrouter()
-	redirectRouter.HandleFunc("/{short-url}", controller.redirectUrl)
-}
+// ----------------------------------------------------------------------------
 
 func (controller *UrlController) redirectUrl(w http.ResponseWriter, r *http.Request) {
+	parser := web.NewParser(r)
 
-	params := mux.Vars(r)
+	urlToRedirect := url.Url{}
 
-	longUrl, err := controller.UrlService.RedirectUrl(params[("short-url")])
+	shortUrlFromPrams, err := parser.GetString("short-url")
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusForbidden)
+		web.RespondError(w, errors.NewValidationError("Invalid short-url format"))
+		return
 	}
-	http.Redirect(w, r, longUrl, http.StatusSeeOther)
-	fmt.Println("Redirected to: ", longUrl)
+	urlToRedirect.ShortUrl = shortUrlFromPrams
+
+	if err = controller.UrlService.RedirectToUrll(&urlToRedirect); err != nil {
+		controller.log.Print(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
+	http.Redirect(w, r, urlToRedirect.LongUrl, http.StatusSeeOther)
 }
 
 // ---------------------------------------------------------------------------
+
 func (controller *UrlController) getAllUrlsByUserId(w http.ResponseWriter, r *http.Request) {
 	allUrl := &[]url.UrlDTO{}
 	parser := web.NewParser(r)
@@ -146,7 +157,6 @@ func (controller *UrlController) getAllUrlsByUserId(w http.ResponseWriter, r *ht
 	}
 
 	web.RespondJSONWithXTotalCount(w, http.StatusOK, totalCount, allUrl)
-
 }
 
 func (controller *UrlController) getUrlById(w http.ResponseWriter, r *http.Request) {
@@ -189,9 +199,90 @@ func (controller *UrlController) getUrlById(w http.ResponseWriter, r *http.Reque
 	web.RespondJSON(w, http.StatusOK, targetURL)
 }
 
-func (controller *UrlController) getUrlByShortUrl(w http.ResponseWriter, r *http.Request) {}
+func (controller *UrlController) getUrlByShortUrl(w http.ResponseWriter, r *http.Request) {
+	parser := web.NewParser(r)
+	originalUrl := url.UrlDTO{}
 
-func (controller *UrlController) updateUrlById(w http.ResponseWriter, r *http.Request) {}
+	err := web.UnmarshalJSON(r, &originalUrl)
+	if err != nil {
+		web.RespondError(w, errors.NewHTTPError("Unable to parse request body", http.StatusBadRequest))
+		return
+	}
+
+	userIdFromURL, err := parser.GetUUID("userId")
+	if err != nil {
+		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
+		return
+	}
+	originalUrl.UserID = userIdFromURL
+
+	userIdFromToken, err := security.ExtractUserIDFromToken(r)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
+	if userIdFromToken != userIdFromURL {
+		web.RespondError(w, errors.NewUnauthorizedError("you are not authorized to view this URL"))
+		return
+	}
+
+	if err := controller.UrlService.GetUrlByShortUrl(&originalUrl); err != nil {
+		web.RespondError(w, err)
+		return
+	}
+
+	web.RespondJSON(w, http.StatusOK, originalUrl)
+}
+
+func (controller *UrlController) updateUrlById(w http.ResponseWriter, r *http.Request) {
+	var targetUrl = &url.Url{}
+	parser := web.NewParser(r)
+
+	err := web.UnmarshalJSON(r, &targetUrl)
+	if err != nil {
+		web.RespondError(w, errors.NewHTTPError("Unable to parse request body", http.StatusBadRequest))
+		return
+	}
+
+	if err := targetUrl.Validate(targetUrl.LongUrl); err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
+	userIdFromURL, err := parser.GetUUID("userId")
+	if err != nil {
+		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
+		return
+	}
+	targetUrl.UserID = userIdFromURL
+
+	urlIdFromUrl, err := parser.GetUUID("urlId")
+	if err != nil {
+		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
+		return
+	}
+	targetUrl.ID = urlIdFromUrl
+
+	targetUrl.UpdatedBy, err = security.ExtractUserIDFromToken(r)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
+	err = controller.UrlService.UpdateUrl(targetUrl)
+	if err != nil {
+		web.RespondError(w, err)
+		return
+	}
+
+	web.RespondJSON(w, http.StatusOK, map[string]string{
+		"message": "Url updated successfully",
+	})
+}
 
 func (controller *UrlController) deleteUrlById(w http.ResponseWriter, r *http.Request) {
 	parser := web.NewParser(r)
@@ -255,5 +346,4 @@ func (controller *UrlController) renewUrlVisits(w http.ResponseWriter, r *http.R
 	web.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": "Url Visits Renewed Successfully",
 	})
-
 }

@@ -42,3 +42,12 @@ func ParseUUID(input string) (uuid.UUID, error) {
 	}
 	return id, nil
 }
+
+// GetString will get a string from the given paramName in URL params.
+func (p *Parser) GetString(paramName string) (string, error) {
+	value := p.Params[paramName]
+	if len(value) == 0 {
+		return "", errors.NewValidationError(paramName + " cannot be empty")
+	}
+	return value, nil
+}

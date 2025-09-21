@@ -84,33 +84,57 @@ func (service *UrlService) CreateUrl(userId uuid.UUID, urlOwner *user.User, newU
 	return nil
 }
 
-func (service *UrlService) RedirectUrl(shortUrl string) (string, error) {
+// func (service *UrlService) RedirectToUrl(shortUrl string) (string, error) {
 
-	uow := repository.NewUnitOfWork(service.db, false)
+// 	uow := repository.NewUnitOfWork(service.db, false)
+// 	defer uow.RollBack()
+
+// 	url := &url.Url{}
+// 	err := service.repository.GetRecord(uow, url, repository.Filter("short_url = ?", shortUrl))
+// 	if err != nil {
+// 		uow.RollBack()
+// 		return "", err
+// 	}
+
+// 	if url.Visits == 0 {
+// 		uow.RollBack()
+// 		return "", errors.NewValidationError("no. of visits elapsed")
+// 	}
+
+// 	url.Visits--
+
+// 	err = service.repository.UpdateWithMap(uow, url, map[string]interface{}{"Visits": url.Visits})
+// 	if err != nil {
+// 		uow.RollBack()
+// 		return "", err
+// 	}
+
+// 	uow.Commit()
+// 	return url.LongUrl, nil
+// }
+
+func (service *UrlService) RedirectToUrll(urlToRedirect *url.Url) error {
+	uow := repository.NewUnitOfWork(service.db, true)
 	defer uow.RollBack()
 
-	url := &url.Url{}
-	err := service.repository.GetRecord(uow, url, repository.Filter("short_url = ?", shortUrl))
-	if err != nil {
-		uow.RollBack()
-		return "", err
+	if err := service.repository.GetRecord(uow, urlToRedirect, repository.Filter("short_url = ?", urlToRedirect.ShortUrl)); err != nil {
+		return errors.NewDatabaseError("no short url matches the given short url")
 	}
 
-	if url.Visits == 0 {
+	if urlToRedirect.Visits == 0 {
 		uow.RollBack()
-		return "", errors.NewValidationError("no. of visits elapsed")
+		return errors.NewInValidPasswordError("no. of visits reacheed it's limit, please renew the visits")
 	}
 
-	url.Visits--
+	urlToRedirect.Visits--
 
-	err = service.repository.UpdateWithMap(uow, url, map[string]interface{}{"Visits": url.Visits})
-	if err != nil {
+	if err := service.repository.UpdateWithMap(uow, urlToRedirect, map[string]interface{}{"visits": urlToRedirect.Visits}); err != nil {
 		uow.RollBack()
-		return "", err
+		return errors.NewDatabaseError("unable to update visits count")
 	}
 
 	uow.Commit()
-	return url.LongUrl, nil
+	return nil
 }
 
 func (service *UrlService) RenewUrlVisits(urlToRenew *url.Url) error {
@@ -205,6 +229,38 @@ func (service *UrlService) GetUrlByID(targetURL *url.UrlDTO) error {
 		return errors.NewDatabaseError("no url found for this user with given url id")
 	}
 
+	return nil
+}
+
+func (service *UrlService) GetUrlByShortUrl(originalUrl *url.UrlDTO) error {
+
+	uow := repository.NewUnitOfWork(service.db, false)
+	defer uow.RollBack()
+
+	if err := service.repository.GetRecord(uow, &originalUrl, repository.Filter("short_url = ? AND user_id = ?", originalUrl.ShortUrl, originalUrl.UserID)); err != nil {
+		return errors.NewDatabaseError("no url found for this user with given short url")
+	}
+
+	uow.Commit()
+	return nil
+}
+
+func (service *UrlService) UpdateUrl(targetUrl *url.Url) error {
+
+	if err := service.doesUrlExist(targetUrl.ID); err != nil {
+		return err
+	}
+
+	uow := repository.NewUnitOfWork(service.db, false)
+	defer uow.RollBack()
+
+	targetUrl.UpdatedAt = time.Now()
+
+	if err := service.repository.Update(uow, targetUrl, repository.Filter("id = ? AND user_id = ?", targetUrl.ID, targetUrl.UserID)); err != nil {
+		return errors.NewDatabaseError("unable to update url")
+	}
+
+	uow.Commit()
 	return nil
 }
 
