@@ -27,9 +27,9 @@ func NewUrlController(urlService *urlService.UrlService, log log.Logger) *UrlCon
 }
 
 // for short url redirection---------------------------------------------------
-func (controller *UrlController) RegisterRedirectRoute(router *mux.Router) {
+func (urlcontroller *UrlController) RegisterRedirectRoute(router *mux.Router) {
 	redirectRouter := router.PathPrefix("/").Subrouter()
-	redirectRouter.HandleFunc("/{short-url}", controller.redirectUrl)
+	redirectRouter.HandleFunc("/{short-url}", urlcontroller.redirectUrl)
 }
 
 func (urlController *UrlController) RegisterRoutes(router *mux.Router) {

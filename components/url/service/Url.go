@@ -19,11 +19,13 @@ type UrlService struct {
 	transactionservice *transactionserv.TransactionService
 }
 
-func NewUrlService(DB *gorm.DB, repo repository.Repository, txService *transactionserv.TransactionService) *UrlService {
+func NewUrlService(DB *gorm.DB, repo repository.Repository) *UrlService {
+
+	var transactionService = transactionserv.NewTransactionService(DB, repo)
 	return &UrlService{
 		db:                 DB,
 		repository:         repo,
-		transactionservice: txService,
+		transactionservice: transactionService,
 	}
 }
 
