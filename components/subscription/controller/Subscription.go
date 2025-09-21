@@ -27,22 +27,29 @@ func NewSubscriptionrController(userService *subscriptionService.SubscriptionSer
 
 func (SubscriptionController *SubscriptionController) RegisterRoutes(router *mux.Router) {
 
-	userRouter := router.PathPrefix("/user/{userId}").Subrouter()
+	userRouter := router.PathPrefix("/user").Subrouter()
 	guardedRouter := userRouter.PathPrefix("/").Subrouter()
 
-	guardedRouter.HandleFunc("/subscriptions", SubscriptionController.setSubscriptionPrice).Methods(http.MethodPost)
-	guardedRouter.HandleFunc("/subscriptions", SubscriptionController.getSubscriptionPrice).Methods(http.MethodGet)
+	guardedRouter.HandleFunc("/subscription", SubscriptionController.setSubscriptionPrice).Methods(http.MethodPost)
+	guardedRouter.HandleFunc("/subscription", SubscriptionController.getSubscriptionPrice).Methods(http.MethodGet)
+	guardedRouter.HandleFunc("/subscription/update", SubscriptionController.updateSubscriptionPrice).Methods(http.MethodPut)
 
 	guardedRouter.Use(security.MiddlewareAdmin)
 }
 
 func (controller *SubscriptionController) setSubscriptionPrice(w http.ResponseWriter, r *http.Request) {
-	parser := web.NewParser(r)
 
 	subscriptionPrices := subscription.Subscription{}
+
 	err := web.UnmarshalJSON(r, &subscriptionPrices)
 	if err != nil {
 		web.RespondError(w, errors.NewHTTPError("unable to parse requested data", http.StatusBadRequest))
+		return
+	}
+
+	if err := subscriptionPrices.Validate(); err != nil {
+		log.GetLogger().Error(err.Error())
+		web.RespondError(w, err)
 		return
 	}
 
@@ -53,14 +60,7 @@ func (controller *SubscriptionController) setSubscriptionPrice(w http.ResponseWr
 		return
 	}
 
-	userIdFromURL, err := parser.GetUUID("userId")
-	if err != nil {
-		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
-		return
-	}
-	// subscriptionPrices.UserId = userIdFromURL
-
-	err = controller.SubscriptionService.SetPrice(&subscriptionPrices, userIdFromURL)
+	err = controller.SubscriptionService.SetSubscriptionPrice(&subscriptionPrices)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -81,4 +81,37 @@ func (controller *SubscriptionController) getSubscriptionPrice(w http.ResponseWr
 	}
 
 	web.RespondJSON(w, http.StatusCreated, subscriptionPrices)
+}
+
+func (controller *SubscriptionController) updateSubscriptionPrice(w http.ResponseWriter, r *http.Request) {
+	subscriptionPrices := subscription.Subscription{}
+
+	err := web.UnmarshalJSON(r, &subscriptionPrices)
+	if err != nil {
+		web.RespondError(w, errors.NewHTTPError("Unable to parse request body", http.StatusBadRequest))
+		return
+	}
+
+	if err := subscriptionPrices.Validate(); err != nil {
+		log.GetLogger().Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
+	subscriptionPrices.UpdatedBy, err = security.ExtractUserIDFromToken(r)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
+	err = controller.SubscriptionService.UpdateSubscriptionPrice(&subscriptionPrices)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	web.RespondJSON(w, http.StatusOK, map[string]string{
+		"message": "Subscription Prices updated successfully",
+	})
 }

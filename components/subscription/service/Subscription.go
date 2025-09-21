@@ -1,13 +1,12 @@
 package service
 
 import (
+	"time"
 	"url-shortner-be/components/errors"
 	"url-shortner-be/model/subscription"
-	"url-shortner-be/model/user"
 	"url-shortner-be/module/repository"
 
 	"github.com/jinzhu/gorm"
-	uuid "github.com/satori/go.uuid"
 )
 
 type SubscriptionService struct {
@@ -22,25 +21,25 @@ func NewSubscriptionService(DB *gorm.DB, repo repository.Repository) *Subscripti
 	}
 }
 
-func (service *SubscriptionService) SetPrice(subscriptionPrices *subscription.Subscription, userId uuid.UUID) error {
+func (service *SubscriptionService) SetSubscriptionPrice(subscriptionPrices *subscription.Subscription) error {
 
 	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
 
-	foundUser := &user.User{}
-	if err := service.repository.GetRecord(uow, foundUser, repository.Filter("id = ?", userId)); err != nil {
-		uow.RollBack()
-		return err
+	var subscriptionCount int
+	var subscriptions []subscription.Subscription
+
+	if err := service.repository.GetCount(uow, &subscriptions, &subscriptionCount); err != nil {
+		return errors.NewDatabaseError("Unable to count subscriptions.")
 	}
 
-	if !*foundUser.IsAdmin && !*foundUser.IsActive {
-		return errors.NewUnauthorizedError("only admin can set subscription price")
+	if subscriptionCount >= 1 {
+		return errors.NewValidationError("Subscription price already set. You can update it.")
 	}
 
-	err := service.repository.Add(uow, &subscriptionPrices)
-	if err != nil {
+	if err := service.repository.Add(uow, &subscriptionPrices); err != nil {
 		uow.RollBack()
-		return err
+		return errors.NewDatabaseError("unable to set subscription price")
 	}
 
 	uow.Commit()
@@ -52,9 +51,24 @@ func (service *SubscriptionService) GetPrice(latest *subscription.Subscription) 
 	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
 
-	err := service.repository.GetRecord(uow, &latest, repository.Order("created_at desc"))
+	err := service.repository.GetAll(uow, &latest)
 	if err != nil {
-		return err
+		return errors.NewDatabaseError("unable to fetch subscription details")
+	}
+
+	uow.Commit()
+	return nil
+}
+
+func (service *SubscriptionService) UpdateSubscriptionPrice(prices *subscription.Subscription) error {
+
+	uow := repository.NewUnitOfWork(service.db, false)
+	defer uow.RollBack()
+
+	prices.UpdatedAt = time.Now()
+
+	if err := service.repository.Update(uow, prices); err != nil {
+		return errors.NewDatabaseError("unable to update Subscription Price")
 	}
 
 	uow.Commit()

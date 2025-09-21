@@ -1,12 +1,14 @@
 package service
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 	"url-shortner-be/components/errors"
 	"url-shortner-be/components/security"
 	transactionserv "url-shortner-be/components/transaction/service"
 	"url-shortner-be/model/credential"
+	"url-shortner-be/model/stats"
 	"url-shortner-be/model/subscription"
 	"url-shortner-be/model/transaction"
 	"url-shortner-be/model/user"
@@ -88,7 +90,7 @@ func (service *UserService) CreateUser(newUser *user.User) error {
 	err = service.repository.GetRecord(uow, &subscription)
 	if err != nil {
 		uow.RollBack()
-		return errors.NewDatabaseError("unable to fetch subscription details")
+		return errors.NewDatabaseError("Admin has not set subscription price yet, please contact admin")
 	}
 	newUser.UrlCount = subscription.FreeShortUrls
 
@@ -396,6 +398,36 @@ func (service *UserService) RenewUrls(userToUpdate *user.User) error {
 
 	uow.Commit()
 	return nil
+}
+
+func (s *UserService) GetMonthlyStats(table string, column string, year int, extraFilter string) ([]stats.MonthlyStat, error) {
+	var stats []stats.MonthlyStat
+
+	query := fmt.Sprintf(`
+		SELECT MONTH(%s) as month, COUNT(*) as value
+		FROM %s
+		WHERE YEAR(%s) = ? %s
+		GROUP BY MONTH(%s)
+		ORDER BY MONTH(%s)
+	`, column, table, column, extraFilter, column, column)
+
+	err := s.db.Raw(query, year).Scan(&stats).Error
+	return stats, err
+}
+
+func (s *UserService) GetMonthlyRevenue(year int) ([]stats.MonthlyStat, error) {
+	var stats []stats.MonthlyStat
+
+	query := `
+		SELECT MONTH(created_at) as month, SUM(amount) as value
+		FROM transactions
+		WHERE YEAR(created_at) = ?
+		GROUP BY MONTH(created_at)
+		ORDER BY MONTH(created_at)
+	`
+
+	err := s.db.Raw(query, year).Scan(&stats).Error
+	return stats, err
 }
 
 // ---------------- Helpers ----------------

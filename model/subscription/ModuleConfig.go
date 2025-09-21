@@ -25,10 +25,10 @@ func (c *SubscriptionModuleConfig) MigrateTables() {
 		log.NewLog().Print("Auto Migrating Subscription ==> %s", err)
 	}
 
-	err = c.DB.Model(&Subscription{}).AddForeignKey("user_id", "users(id)", "CASCADE", "CASCADE").Error
-	if err != nil {
-		log.GetLogger().Print("Foreign Key Constraints Of Subscription ==> %s", err)
-	}
+	// err = c.DB.Model(&Subscription{}).AddForeignKey("user_id", "users(id)", "CASCADE", "CASCADE").Error
+	// if err != nil {
+	// 	log.GetLogger().Print("Foreign Key Constraints Of Subscription ==> %s", err)
+	// }
 
 	log.GetLogger().Print("Subscription Module Configured.")
 }

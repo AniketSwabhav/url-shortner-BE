@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"url-shortner-be/components/errors"
@@ -8,6 +9,7 @@ import (
 	"url-shortner-be/components/security"
 	"url-shortner-be/components/web"
 	"url-shortner-be/model/credential"
+	"url-shortner-be/model/stats"
 	"url-shortner-be/model/subscription"
 	"url-shortner-be/model/transaction"
 	"url-shortner-be/model/user"
@@ -52,6 +54,7 @@ func (userController *UserController) RegisterRoutes(router *mux.Router) {
 	// userguardedRouter.HandleFunc("/{userId}/amount", userController.GetAmount).Methods(http.MethodGet)
 
 	adminguardedRouter.HandleFunc("/", userController.getAllUsers).Methods(http.MethodGet)
+	adminguardedRouter.HandleFunc("/monthwise-records", userController.getMonthWiseRecords).Methods(http.MethodGet)
 	adminguardedRouter.HandleFunc("/{userId}", userController.getUserByID).Methods(http.MethodGet)
 	adminguardedRouter.HandleFunc("/{userId}", userController.updateUserById).Methods(http.MethodPut)
 	adminguardedRouter.HandleFunc("/{userId}", userController.deleteUserById).Methods(http.MethodDelete)
@@ -73,6 +76,8 @@ func (controller *UserController) registerAdmin(w http.ResponseWriter, r *http.R
 
 	if err := newAdmin.Validate(); err != nil {
 		log.GetLogger().Error(err.Error())
+		web.RespondError(w, err)
+		return
 	}
 
 	err = controller.UserService.CreateAdmin(&newAdmin)
@@ -95,7 +100,8 @@ func (controller *UserController) registerUser(w http.ResponseWriter, r *http.Re
 
 	if err := newUser.Validate(); err != nil {
 		log.GetLogger().Error(err.Error())
-
+		web.RespondError(w, err)
+		return
 	}
 
 	err = controller.UserService.CreateUser(&newUser)
@@ -435,4 +441,68 @@ func (controller *UserController) renewUrlsByUserId(w http.ResponseWriter, r *ht
 	web.RespondJSON(w, http.StatusOK, map[string]string{
 		"message": "Urls Renewed Successfully",
 	})
+}
+
+func (controller *UserController) getMonthWiseRecords(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	value := query.Get("value")
+	yearStr := query.Get("year")
+
+	year, err := strconv.Atoi(yearStr)
+	if err != nil {
+		http.Error(w, "invalid year", http.StatusBadRequest)
+		return
+	}
+
+	var stats = []stats.MonthlyStat{}
+
+	switch value {
+	case "new-users":
+		stats, err = controller.UserService.GetMonthlyStats("users", "created_at", year, "")
+	case "active-users":
+		stats, err = controller.UserService.GetMonthlyStats("users", "created_at", year, "AND is_active = 1")
+	case "urls-generated":
+		stats, err = controller.UserService.GetMonthlyStats("urls", "created_at", year, "")
+	case "urls-renewed":
+		stats, err = controller.UserService.GetMonthlyStats("transactions", "created_at", year, "")
+	case "total-revenue":
+		stats, err = controller.UserService.GetMonthlyRevenue(year)
+	default:
+		http.Error(w, "invalid value type", http.StatusBadRequest)
+		return
+	}
+
+	if err != nil {
+		web.RespondErrorMessage(w, http.StatusInternalServerError, "error in fetching stats")
+		return
+	}
+
+	months := [...]string{
+		"January", "February", "March", "April", "May", "June",
+		"July", "August", "September", "October", "November", "December",
+	}
+
+	dataMonthly := make(map[string]interface{})
+	dataCount := make(map[string]interface{})
+
+	for _, month := range months {
+		dataMonthly[month] = 0
+		dataCount[month] = 0
+	}
+
+	for _, stat := range stats {
+		monthName := months[stat.Month-1]
+		dataMonthly[monthName] = stat.Value
+		dataCount[monthName] = stat.Value
+	}
+
+	jsonCounts, err := json.Marshal(dataCount)
+	if err != nil {
+		web.RespondErrorMessage(w, http.StatusInternalServerError, "Unable to marshal counts header")
+		return
+	}
+
+	web.SetNewHeader(w, "X-Monthly-Counts", string(jsonCounts))
+
+	web.RespondJSON(w, http.StatusOK, dataMonthly)
 }

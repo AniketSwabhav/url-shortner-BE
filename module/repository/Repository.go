@@ -193,26 +193,6 @@ func DoesEmailExist(db *gorm.DB, email string, out interface{}, queryProcessors 
 	return false, nil
 }
 
-// func DoesRecordExistForUser(db *gorm.DB, userID uuid.UUID, out interface{}, queryProcessors ...QueryProcessor) (bool, error) {
-// 	if userID == uuid.Nil {
-// 		return false, errors.NewValidationError("DoesRecordExistForTenant")
-// 	}
-// 	count := 0
-// 	// Below comment would make the tenant check before all query processor (Uncomment only if needed in future)
-// 	// queryProcessors = append([]QueryProcessor{Filter("tenant_id = ?", tenantID)},queryProcessors... )
-// 	db, err := executeQueryProcessors(db, out, queryProcessors...)
-// 	if err != nil {
-// 		return false, err
-// 	}
-// 	if err := db.Debug().Model(out).Where("id = ?", userID).Count(&count).Error; err != nil {
-// 		return false, err
-// 	}
-// 	if count > 0 {
-// 		return true, nil
-// 	}
-// 	return false, nil
-// }
-
 func (repository *GormRepository) Update(uow *UnitOfWork, out interface{}, queryProcessors ...QueryProcessor) error {
 	db := uow.DB
 	db, err := executeQueryProcessors(db, out, queryProcessors...)
