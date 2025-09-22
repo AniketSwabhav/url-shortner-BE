@@ -80,6 +80,11 @@ func (service *UserService) CreateUser(newUser *user.User) error {
 		return err
 	}
 
+	if newUser.IsAdmin == nil {
+		newUser.IsAdmin = new(bool)
+	}
+	*newUser.IsAdmin = false
+
 	hashedPassword, err := hashPassword(newUser.Credentials.Password)
 	if err != nil {
 		return errors.NewHTTPError("failed to hash password", http.StatusInternalServerError)
@@ -225,16 +230,17 @@ func (service *UserService) Delete(userID uuid.UUID, deletedBy uuid.UUID) error 
 }
 
 func (service *UserService) AddAmountToWalllet(userID uuid.UUID, userToAddMoney *user.User) error {
-	uow := repository.NewUnitOfWork(service.db, false)
-	defer uow.RollBack()
 
 	if userToAddMoney.Wallet <= 0 {
-		return errors.NewValidationError("Amount must be greater than zero")
+		return errors.NewValidationError("Credit Amount must be greater than zero")
 	}
 
 	if err := service.doesUserExist(userID); err != nil {
 		return err
 	}
+
+	uow := repository.NewUnitOfWork(service.db, false)
+	defer uow.RollBack()
 
 	var dbUser user.User
 	if err := service.repository.GetRecord(uow, &dbUser, repository.Filter("id = ?", userID)); err != nil {
@@ -247,11 +253,46 @@ func (service *UserService) AddAmountToWalllet(userID uuid.UUID, userToAddMoney 
 
 	var amount = userToAddMoney.Wallet
 
-	if amount <= 0 {
-		return errors.NewValidationError("Amount must be greater than zero")
+	dbUser.Wallet += amount
+
+	if err := service.repository.UpdateWithMap(uow, &dbUser,
+		map[string]interface{}{
+			"wallet":     dbUser.Wallet,
+			"updated_at": time.Now(),
+		},
+		repository.Filter("id = ?", userID),
+	); err != nil {
+		return errors.NewDatabaseError("Failed to update wallet")
 	}
 
-	dbUser.Wallet += amount
+	uow.Commit()
+	return nil
+}
+func (service *UserService) WithdrawMoneyFromWallet(userID uuid.UUID, userToWthdrawMoney *user.User) error {
+
+	if userToWthdrawMoney.Wallet <= 0 {
+		return errors.NewValidationError("Wihdraw amount must be greater than zero")
+	}
+
+	if err := service.doesUserExist(userID); err != nil {
+		return err
+	}
+
+	uow := repository.NewUnitOfWork(service.db, false)
+	defer uow.RollBack()
+
+	var dbUser user.User
+	if err := service.repository.GetRecord(uow, &dbUser, repository.Filter("id = ?", userID)); err != nil {
+		return errors.NewNotFoundError("User not found")
+	}
+
+	if dbUser.ID != userToWthdrawMoney.ID {
+		return errors.NewUnauthorizedError("you are not authorized to add amount to this wallet")
+	}
+
+	var amount = userToWthdrawMoney.Wallet
+
+	dbUser.Wallet -= amount
 
 	if err := service.repository.UpdateWithMap(uow, &dbUser,
 		map[string]interface{}{
@@ -323,6 +364,23 @@ func (service *UserService) GetAllTransactions(transactions *[]transaction.Trans
 		repository.Order("created_at desc"),
 	); err != nil {
 		return errors.NewDatabaseError("unable to fetch transactions for this user")
+	}
+
+	uow.Commit()
+	return nil
+}
+
+func (service *UserService) GetWalletAmount(user *user.UserDTO) error {
+
+	if err := service.doesUserExist(user.ID); err != nil {
+		return errors.NewDatabaseError("user not found with given id")
+	}
+
+	uow := repository.NewUnitOfWork(service.db, true)
+	defer uow.RollBack()
+
+	if err := service.repository.GetRecordByID(uow, user.ID, user); err != nil {
+		return errors.NewDatabaseError("Unable to fetch wallet amount for this user")
 	}
 
 	uow.Commit()

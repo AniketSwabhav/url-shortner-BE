@@ -51,7 +51,7 @@ func (userController *UserController) RegisterRoutes(router *mux.Router) {
 	userguardedRouter.HandleFunc("/{userId}/wallet/withdraw", userController.withdrawAmountFromWallet).Methods(http.MethodPost)
 	userguardedRouter.HandleFunc("/{userId}/renew-urls", userController.renewUrlsByUserId).Methods(http.MethodPost)
 	userguardedRouter.HandleFunc("/{userId}/transactions", userController.getTransactionByUserId).Methods(http.MethodGet)
-	// userguardedRouter.HandleFunc("/{userId}/amount", userController.GetAmount).Methods(http.MethodGet)
+	userguardedRouter.HandleFunc("/{userId}/amount", userController.getwalletAmount).Methods(http.MethodGet)
 
 	adminguardedRouter.HandleFunc("/", userController.getAllUsers).Methods(http.MethodGet)
 	adminguardedRouter.HandleFunc("/monthwise-records", userController.getMonthWiseRecords).Methods(http.MethodGet)
@@ -80,8 +80,7 @@ func (controller *UserController) registerAdmin(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	err = controller.UserService.CreateAdmin(&newAdmin)
-	if err != nil {
+	if err = controller.UserService.CreateAdmin(&newAdmin); err != nil {
 		web.RespondError(w, err)
 		return
 	}
@@ -104,8 +103,7 @@ func (controller *UserController) registerUser(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	err = controller.UserService.CreateUser(&newUser)
-	if err != nil {
+	if err = controller.UserService.CreateUser(&newUser); err != nil {
 		web.RespondError(w, err)
 		return
 	}
@@ -124,8 +122,7 @@ func (controller *UserController) login(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	err = controller.UserService.Login(&userCredentials, &claim)
-	if err != nil {
+	if err = controller.UserService.Login(&userCredentials, &claim); err != nil {
 		web.RespondError(w, err)
 		return
 	}
@@ -156,8 +153,7 @@ func (controller *UserController) getUserByID(w http.ResponseWriter, r *http.Req
 	}
 	targetUser.ID = userIdFromURL
 
-	err = controller.UserService.GetUserByID(targetUser)
-	if err != nil {
+	if err = controller.UserService.GetUserByID(targetUser); err != nil {
 		web.RespondError(w, err)
 		return
 	}
@@ -193,8 +189,7 @@ func (controller *UserController) updateUserById(w http.ResponseWriter, r *http.
 		return
 	}
 
-	err = controller.UserService.UpdateUser(targetUser)
-	if err != nil {
+	if err = controller.UserService.UpdateUser(targetUser); err != nil {
 		web.RespondError(w, err)
 		return
 	}
@@ -222,8 +217,7 @@ func (controller *UserController) getAllUsers(w http.ResponseWriter, r *http.Req
 		offset = 0
 	}
 
-	err = controller.UserService.GetAllUsers(allUsers, &totalCount, limit, offset)
-	if err != nil {
+	if err = controller.UserService.GetAllUsers(allUsers, &totalCount, limit, offset); err != nil {
 		controller.log.Print(err.Error())
 		web.RespondError(w, err)
 		return
@@ -247,8 +241,7 @@ func (controller *UserController) deleteUserById(w http.ResponseWriter, r *http.
 		return
 	}
 
-	err = controller.UserService.Delete(userID, deletedBy)
-	if err != nil {
+	if err = controller.UserService.Delete(userID, deletedBy); err != nil {
 		controller.log.Error(err.Error())
 		web.RespondError(w, err)
 		return
@@ -283,8 +276,7 @@ func (controller *UserController) addAmountToWallet(w http.ResponseWriter, r *ht
 	}
 	userToAddMoney.ID = userIdFromToken
 
-	err = controller.UserService.AddAmountToWalllet(userIdFromUrl, userToAddMoney)
-	if err != nil {
+	if err = controller.UserService.AddAmountToWalllet(userIdFromUrl, userToAddMoney); err != nil {
 		controller.log.Error(err.Error())
 		web.RespondError(w, err)
 		return
@@ -298,33 +290,35 @@ func (controller *UserController) addAmountToWallet(w http.ResponseWriter, r *ht
 func (controller *UserController) withdrawAmountFromWallet(w http.ResponseWriter, r *http.Request) {
 	parser := web.NewParser(r)
 
-	userId, err := parser.GetUUID("userId")
+	userIdFromUrl, err := parser.GetUUID("userId")
 	if err != nil {
 		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
 		return
 	}
 
-	var req user.User
-	err = web.UnmarshalJSON(r, &req)
+	userToWithdrawMoney := &user.User{}
+	err = web.UnmarshalJSON(r, &userToWithdrawMoney)
 	if err != nil {
 		web.RespondError(w, errors.NewHTTPError("Unable to parse request body", http.StatusBadRequest))
 		return
 	}
 
-	if req.Wallet <= 0 {
-		web.RespondError(w, errors.NewValidationError("Amount must be greater than zero"))
+	userIdFromToken, err := security.ExtractUserIDFromToken(r)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
 		return
 	}
+	userToWithdrawMoney.ID = userIdFromToken
 
-	err = controller.UserService.WithdrawAmountFromWallet(userId, req.Wallet)
-	if err != nil {
+	if err = controller.UserService.WithdrawMoneyFromWallet(userIdFromUrl, userToWithdrawMoney); err != nil {
 		controller.log.Error(err.Error())
 		web.RespondError(w, err)
 		return
 	}
 
 	web.RespondJSON(w, http.StatusOK, map[string]string{
-		"message": "Amount withdrawn successfully",
+		"message": "Amount added successfully",
 	})
 }
 
@@ -365,13 +359,43 @@ func (controller *UserController) getTransactionByUserId(w http.ResponseWriter, 
 		offset = 0
 	}
 
-	err = controller.UserService.GetAllTransactions(&transactions, &totalCount, limit, offset, userIdFromUrl)
-	if err != nil {
+	if err = controller.UserService.GetAllTransactions(&transactions, &totalCount, limit, offset, userIdFromUrl); err != nil {
 		web.RespondError(w, err)
 		return
 	}
 
 	web.RespondJSONWithXTotalCount(w, http.StatusOK, totalCount, transactions)
+}
+
+func (controller *UserController) getwalletAmount(w http.ResponseWriter, r *http.Request) {
+	user := user.UserDTO{}
+	parser := web.NewParser(r)
+
+	userIdFromURL, err := parser.GetUUID("userId")
+	if err != nil {
+		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
+		return
+	}
+
+	userIdFromToken, err := security.ExtractUserIDFromToken(r)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
+	if userIdFromToken != userIdFromURL {
+		web.RespondError(w, errors.NewUnauthorizedError("you are not authorized to view transactions for this user"))
+	}
+
+	user.ID = userIdFromURL
+
+	if err := controller.UserService.GetWalletAmount(&user); err != nil {
+		web.RespondError(w, err)
+		return
+	}
+
+	web.RespondJSON(w, http.StatusOK, user.Wallet)
 }
 
 func (controller *UserController) getSubscription(w http.ResponseWriter, r *http.Request) {
@@ -401,8 +425,7 @@ func (controller *UserController) getSubscription(w http.ResponseWriter, r *http
 		offset = 0
 	}
 
-	err = controller.UserService.GetSubscription(&subscriptions, &totalCount, limit, offset, userId)
-	if err != nil {
+	if err = controller.UserService.GetSubscription(&subscriptions, &totalCount, limit, offset, userId); err != nil {
 		web.RespondError(w, err)
 		return
 	}

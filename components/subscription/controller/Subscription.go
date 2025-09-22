@@ -60,8 +60,7 @@ func (controller *SubscriptionController) setSubscriptionPrice(w http.ResponseWr
 		return
 	}
 
-	err = controller.SubscriptionService.SetSubscriptionPrice(&subscriptionPrices)
-	if err != nil {
+	if err = controller.SubscriptionService.SetSubscriptionPrice(&subscriptionPrices); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -73,8 +72,7 @@ func (controller *SubscriptionController) getSubscriptionPrice(w http.ResponseWr
 
 	subscriptionPrices := subscription.Subscription{}
 
-	err := controller.SubscriptionService.GetPrice(&subscriptionPrices)
-	if err != nil {
+	if err := controller.SubscriptionService.GetPrice(&subscriptionPrices); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		fmt.Println(err)
 		return
@@ -105,8 +103,7 @@ func (controller *SubscriptionController) updateSubscriptionPrice(w http.Respons
 		return
 	}
 
-	err = controller.SubscriptionService.UpdateSubscriptionPrice(&subscriptionPrices)
-	if err != nil {
+	if err = controller.SubscriptionService.UpdateSubscriptionPrice(&subscriptionPrices); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
