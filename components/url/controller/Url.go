@@ -101,7 +101,7 @@ func (controller *UrlController) redirectUrl(w http.ResponseWriter, r *http.Requ
 	}
 	urlToRedirect.ShortUrl = shortUrlFromPrams
 
-	if err = controller.UrlService.RedirectToUrll(&urlToRedirect); err != nil {
+	if err = controller.UrlService.RedirectToUrl(&urlToRedirect); err != nil {
 		controller.log.Print(err.Error())
 		web.RespondError(w, err)
 		return

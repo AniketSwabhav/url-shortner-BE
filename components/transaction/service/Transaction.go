@@ -23,7 +23,7 @@ func NewTransactionService(db *gorm.DB, repo repository.Repository) *Transaction
 	}
 }
 
-func (service *TransactionService) CreateTransaction(uow *repository.UnitOfWork, userId uuid.UUID, amount float32) error {
+func (service *TransactionService) CreateTransaction(uow *repository.UnitOfWork, userId uuid.UUID, amount float32, transactionType, note string) error {
 
 	user := &user.User{}
 	err := service.repository.GetRecord(uow, user, repository.Filter("id = ?", userId))
@@ -33,6 +33,8 @@ func (service *TransactionService) CreateTransaction(uow *repository.UnitOfWork,
 
 	transaction := &transaction.Transaction{
 		Amount: amount,
+		Type:   transactionType,
+		Note:   note,
 		UserID: user.ID,
 	}
 	transaction.CreatedBy = userId

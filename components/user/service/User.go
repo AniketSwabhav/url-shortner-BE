@@ -103,6 +103,15 @@ func (service *UserService) CreateUser(newUser *user.User) error {
 		return errors.NewDatabaseError("Failed to create user")
 	}
 
+	//transaction--------------------------------------------------------------------------------------------------
+	var transactionType = "ACCOUNTCREATION"
+	var note = fmt.Sprintf("First %d Free Url's limit is added to account, with %d Free visits per URL", subscription.FreeShortUrls, subscription.FreeVisits)
+
+	if err := service.transactionservice.CreateTransaction(uow, newUser.ID, 0.0, transactionType, note); err != nil {
+		uow.RollBack()
+		return errors.NewDatabaseError("unable to create transaction")
+	}
+
 	uow.Commit()
 	return nil
 }
@@ -265,6 +274,15 @@ func (service *UserService) AddAmountToWalllet(userID uuid.UUID, userToAddMoney 
 		return errors.NewDatabaseError("Failed to update wallet")
 	}
 
+	//transaction--------------------------------------------------------------------------------------------------
+	var transactionType = "CREDIT"
+	var note = fmt.Sprintf("%0.2f added in the wallet", amount)
+
+	if err := service.transactionservice.CreateTransaction(uow, userToAddMoney.ID, amount, transactionType, note); err != nil {
+		uow.RollBack()
+		return errors.NewDatabaseError("unable to create transaction")
+	}
+
 	uow.Commit()
 	return nil
 }
@@ -287,7 +305,7 @@ func (service *UserService) WithdrawMoneyFromWallet(userID uuid.UUID, userToWthd
 	}
 
 	if dbUser.ID != userToWthdrawMoney.ID {
-		return errors.NewUnauthorizedError("you are not authorized to add amount to this wallet")
+		return errors.NewUnauthorizedError("you are not authorized to withdraw amount from wallet")
 	}
 
 	var amount = userToWthdrawMoney.Wallet
@@ -302,6 +320,15 @@ func (service *UserService) WithdrawMoneyFromWallet(userID uuid.UUID, userToWthd
 		repository.Filter("id = ?", userID),
 	); err != nil {
 		return errors.NewDatabaseError("Failed to update wallet")
+	}
+
+	//transaction--------------------------------------------------------------------------------------------------
+	var transactionType = "DEBIT"
+	var note = fmt.Sprintf("%0.2f removed from the wallet", amount)
+
+	if err := service.transactionservice.CreateTransaction(uow, userToWthdrawMoney.ID, amount, transactionType, note); err != nil {
+		uow.RollBack()
+		return errors.NewDatabaseError("unable to create transaction")
 	}
 
 	uow.Commit()
@@ -449,7 +476,11 @@ func (service *UserService) RenewUrls(userToUpdate *user.User) error {
 		return err
 	}
 
-	if err := service.transactionservice.CreateTransaction(uow, existingUser.ID, totalPriceToRenew); err != nil {
+	//transaction--------------------------------------------------------------------------------------------------
+	var transactionType = "URLRENEWAL"
+	var note = fmt.Sprintf("%d url renewed for %0.2f per url renewal price", userToUpdate.UrlCount, subscription.NewUrlPrice)
+
+	if err := service.transactionservice.CreateTransaction(uow, existingUser.ID, totalPriceToRenew, transactionType, note); err != nil {
 		uow.RollBack()
 		return errors.NewDatabaseError("unable to create transaction")
 	}

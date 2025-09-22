@@ -53,12 +53,13 @@ func (userController *UserController) RegisterRoutes(router *mux.Router) {
 	userguardedRouter.HandleFunc("/{userId}/transactions", userController.getTransactionByUserId).Methods(http.MethodGet)
 	userguardedRouter.HandleFunc("/{userId}/amount", userController.getwalletAmount).Methods(http.MethodGet)
 
-	adminguardedRouter.HandleFunc("/", userController.getAllUsers).Methods(http.MethodGet)
+	adminguardedRouter.HandleFunc("/{userId}", userController.getAllUsers).Methods(http.MethodGet)
 	adminguardedRouter.HandleFunc("/monthwise-records", userController.getMonthWiseRecords).Methods(http.MethodGet)
 	adminguardedRouter.HandleFunc("/{userId}", userController.getUserByID).Methods(http.MethodGet)
 	adminguardedRouter.HandleFunc("/{userId}", userController.updateUserById).Methods(http.MethodPut)
 	adminguardedRouter.HandleFunc("/{userId}", userController.deleteUserById).Methods(http.MethodDelete)
 	adminguardedRouter.HandleFunc("/{userId}/subcription", userController.getSubscription).Methods(http.MethodGet)
+	// adminguardedRouter.HandleFunc("/{userId}/all-user-transactions", userController.getAllUserTransactions).Methods(http.MethodGet)
 
 	userguardedRouter.Use(security.MiddlewareUser)
 	adminguardedRouter.Use(security.MiddlewareAdmin)
@@ -153,6 +154,18 @@ func (controller *UserController) getUserByID(w http.ResponseWriter, r *http.Req
 	}
 	targetUser.ID = userIdFromURL
 
+	userIdFromToken, err := security.ExtractUserIDFromToken(r)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
+	if userIdFromURL != userIdFromToken {
+		web.RespondError(w, errors.NewUnauthorizedError("you are not authorized to view user details"))
+		return
+	}
+
 	if err = controller.UserService.GetUserByID(targetUser); err != nil {
 		web.RespondError(w, err)
 		return
@@ -182,10 +195,16 @@ func (controller *UserController) updateUserById(w http.ResponseWriter, r *http.
 	}
 	targetUser.ID = userIdFromURL
 
-	targetUser.UpdatedBy, err = security.ExtractUserIDFromToken(r)
+	userIdFromToken, err := security.ExtractUserIDFromToken(r)
 	if err != nil {
 		controller.log.Error(err.Error())
 		web.RespondError(w, err)
+		return
+	}
+	targetUser.UpdatedBy = userIdFromToken
+
+	if userIdFromURL != userIdFromToken {
+		web.RespondError(w, errors.NewUnauthorizedError("you are not authorized to update the user"))
 		return
 	}
 
@@ -203,6 +222,7 @@ func (controller *UserController) getAllUsers(w http.ResponseWriter, r *http.Req
 	allUsers := &[]user.UserDTO{}
 	var totalCount int
 	query := r.URL.Query()
+	parser := web.NewParser(r)
 
 	limitStr := query.Get("limit")
 	offsetStr := query.Get("offset")
@@ -215,6 +235,24 @@ func (controller *UserController) getAllUsers(w http.ResponseWriter, r *http.Req
 	offset, err := strconv.Atoi(offsetStr)
 	if err != nil || offset < 0 {
 		offset = 0
+	}
+
+	userIdFromURL, err := parser.GetUUID("userId")
+	if err != nil {
+		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
+		return
+	}
+
+	userIdFromToken, err := security.ExtractUserIDFromToken(r)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
+	if userIdFromURL != userIdFromToken {
+		web.RespondError(w, errors.NewUnauthorizedError("you are not authorized to view all users"))
+		return
 	}
 
 	if err = controller.UserService.GetAllUsers(allUsers, &totalCount, limit, offset); err != nil {
@@ -318,7 +356,7 @@ func (controller *UserController) withdrawAmountFromWallet(w http.ResponseWriter
 	}
 
 	web.RespondJSON(w, http.StatusOK, map[string]string{
-		"message": "Amount added successfully",
+		"message": "Amount removed successfully",
 	})
 }
 
