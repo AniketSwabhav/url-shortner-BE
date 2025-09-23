@@ -2,9 +2,11 @@ package service
 
 import (
 	"fmt"
+	urlNet "net/url"
 	"time"
 	"url-shortner-be/components/errors"
 	transactionserv "url-shortner-be/components/transaction/service"
+	"url-shortner-be/components/web"
 	"url-shortner-be/model/subscription"
 	"url-shortner-be/model/url"
 	"url-shortner-be/model/user"
@@ -206,21 +208,37 @@ func (service *UrlService) RenewUrlVisits(urlToRenew *url.Url) error {
 	return nil
 }
 
-func (service *UrlService) GetAllUrls(allUrl *[]url.UrlDTO, userId uuid.UUID, totalCount *int, limit, offset int) error {
+func (service *UrlService) GetAllUrls(allUrl *[]url.UrlDTO, userId uuid.UUID, parser *web.Parser, totalCount *int) error {
+
+	var queryProcessors []repository.QueryProcessor
+	limit, offset := parser.ParseLimitAndOffset()
 
 	uow := repository.NewUnitOfWork(service.db, true)
 	defer uow.RollBack()
 
-	if err := service.repository.GetAll(uow, allUrl, repository.Filter("user_id = ?", userId), repository.Paginate(limit, offset, totalCount)); err != nil {
-		return errors.NewDatabaseError("error in fetching urls of user")
-	}
+	queryProcessors = append(queryProcessors, repository.Filter("user_id = ?", userId),
+		service.addSearchQueries(parser.Form),
+		repository.Paginate(limit, offset, totalCount))
 
-	if err := service.repository.GetCount(uow, allUrl, totalCount, repository.Filter("user_id = ?", userId)); err != nil {
-		return err
+	if err := service.repository.GetAll(uow, allUrl, queryProcessors...); err != nil {
+		return errors.NewDatabaseError("error in fetching urls of user")
 	}
 
 	uow.Commit()
 	return nil
+}
+
+func (service *UrlService) addSearchQueries(requestForm urlNet.Values) repository.QueryProcessor {
+
+	var queryProcessors []repository.QueryProcessor
+
+	if len(requestForm) == 0 {
+		return nil
+	}
+
+	queryProcessors = append(queryProcessors, repository.Filter("short_url LIKE (?)", "%"+requestForm.Get("shortUrl")+"%"))
+
+	return repository.CombineQueries(queryProcessors)
 }
 
 func (service *UrlService) GetUrlByID(targetURL *url.UrlDTO) error {

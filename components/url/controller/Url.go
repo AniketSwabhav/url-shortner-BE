@@ -2,7 +2,6 @@ package controller
 
 import (
 	"net/http"
-	"strconv"
 	"url-shortner-be/components/errors"
 	"url-shortner-be/components/log"
 	"url-shortner-be/components/security"
@@ -113,23 +112,23 @@ func (controller *UrlController) redirectUrl(w http.ResponseWriter, r *http.Requ
 // ---------------------------------------------------------------------------
 
 func (controller *UrlController) getAllUrlsByUserId(w http.ResponseWriter, r *http.Request) {
-	allUrl := &[]url.UrlDTO{}
-	parser := web.NewParser(r)
+	allUrl := []url.UrlDTO{}
 	var totalCount int
-	query := r.URL.Query()
+	parser := web.NewParser(r)
+	// query := r.URL.Query()
 
-	limitStr := query.Get("limit")
-	offsetStr := query.Get("offset")
+	// limitStr := query.Get("limit")
+	// offsetStr := query.Get("offset")
 
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit <= 0 {
-		limit = 5
-	}
+	// limit, err := strconv.Atoi(limitStr)
+	// if err != nil || limit <= 0 {
+	// 	limit = 5
+	// }
 
-	offset, err := strconv.Atoi(offsetStr)
-	if err != nil || offset < 0 {
-		offset = 0
-	}
+	// offset, err := strconv.Atoi(offsetStr)
+	// if err != nil || offset < 0 {
+	// 	offset = 0
+	// }
 
 	userIdFromURL, err := parser.GetUUID("userId")
 	if err != nil {
@@ -149,7 +148,7 @@ func (controller *UrlController) getAllUrlsByUserId(w http.ResponseWriter, r *ht
 		return
 	}
 
-	if err = controller.UrlService.GetAllUrls(allUrl, userIdFromURL, &totalCount, limit, offset); err != nil {
+	if err = controller.UrlService.GetAllUrls(&allUrl, userIdFromURL, parser, &totalCount); err != nil {
 		controller.log.Print(err.Error())
 		web.RespondError(w, err)
 		return
