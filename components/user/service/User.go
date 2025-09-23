@@ -80,6 +80,11 @@ func (service *UserService) CreateUser(newUser *user.User) error {
 		return err
 	}
 
+	if newUser.IsAdmin == nil {
+		newUser.IsAdmin = new(bool)
+	}
+	*newUser.IsAdmin = false
+
 	hashedPassword, err := hashPassword(newUser.Credentials.Password)
 	if err != nil {
 		return errors.NewHTTPError("failed to hash password", http.StatusInternalServerError)
@@ -96,6 +101,15 @@ func (service *UserService) CreateUser(newUser *user.User) error {
 
 	if err := uow.DB.Create(newUser).Error; err != nil {
 		return errors.NewDatabaseError("Failed to create user")
+	}
+
+	//transaction--------------------------------------------------------------------------------------------------
+	var transactionType = "ACCOUNTCREATION"
+	var note = fmt.Sprintf("First %d Free Url's limit is added to account, with %d Free visits per URL", subscription.FreeShortUrls, subscription.FreeVisits)
+
+	if err := service.transactionservice.CreateTransaction(uow, newUser.ID, 0.0, transactionType, note); err != nil {
+		uow.RollBack()
+		return errors.NewDatabaseError("unable to create transaction")
 	}
 
 	uow.Commit()
@@ -225,16 +239,17 @@ func (service *UserService) Delete(userID uuid.UUID, deletedBy uuid.UUID) error 
 }
 
 func (service *UserService) AddAmountToWalllet(userID uuid.UUID, userToAddMoney *user.User) error {
-	uow := repository.NewUnitOfWork(service.db, false)
-	defer uow.RollBack()
 
 	if userToAddMoney.Wallet <= 0 {
-		return errors.NewValidationError("Amount must be greater than zero")
+		return errors.NewValidationError("Credit Amount must be greater than zero")
 	}
 
 	if err := service.doesUserExist(userID); err != nil {
 		return err
 	}
+
+	uow := repository.NewUnitOfWork(service.db, false)
+	defer uow.RollBack()
 
 	var dbUser user.User
 	if err := service.repository.GetRecord(uow, &dbUser, repository.Filter("id = ?", userID)); err != nil {
@@ -247,10 +262,6 @@ func (service *UserService) AddAmountToWalllet(userID uuid.UUID, userToAddMoney 
 
 	var amount = userToAddMoney.Wallet
 
-	if amount <= 0 {
-		return errors.NewValidationError("Amount must be greater than zero")
-	}
-
 	dbUser.Wallet += amount
 
 	if err := service.repository.UpdateWithMap(uow, &dbUser,
@@ -261,6 +272,63 @@ func (service *UserService) AddAmountToWalllet(userID uuid.UUID, userToAddMoney 
 		repository.Filter("id = ?", userID),
 	); err != nil {
 		return errors.NewDatabaseError("Failed to update wallet")
+	}
+
+	//transaction--------------------------------------------------------------------------------------------------
+	var transactionType = "CREDIT"
+	var note = fmt.Sprintf("%0.2f added in the wallet", amount)
+
+	if err := service.transactionservice.CreateTransaction(uow, userToAddMoney.ID, amount, transactionType, note); err != nil {
+		uow.RollBack()
+		return errors.NewDatabaseError("unable to create transaction")
+	}
+
+	uow.Commit()
+	return nil
+}
+func (service *UserService) WithdrawMoneyFromWallet(userID uuid.UUID, userToWthdrawMoney *user.User) error {
+
+	if userToWthdrawMoney.Wallet <= 0 {
+		return errors.NewValidationError("Wihdraw amount must be greater than zero")
+	}
+
+	if err := service.doesUserExist(userID); err != nil {
+		return err
+	}
+
+	uow := repository.NewUnitOfWork(service.db, false)
+	defer uow.RollBack()
+
+	var dbUser user.User
+	if err := service.repository.GetRecord(uow, &dbUser, repository.Filter("id = ?", userID)); err != nil {
+		return errors.NewNotFoundError("User not found")
+	}
+
+	if dbUser.ID != userToWthdrawMoney.ID {
+		return errors.NewUnauthorizedError("you are not authorized to withdraw amount from wallet")
+	}
+
+	var amount = userToWthdrawMoney.Wallet
+
+	dbUser.Wallet -= amount
+
+	if err := service.repository.UpdateWithMap(uow, &dbUser,
+		map[string]interface{}{
+			"wallet":     dbUser.Wallet,
+			"updated_at": time.Now(),
+		},
+		repository.Filter("id = ?", userID),
+	); err != nil {
+		return errors.NewDatabaseError("Failed to update wallet")
+	}
+
+	//transaction--------------------------------------------------------------------------------------------------
+	var transactionType = "DEBIT"
+	var note = fmt.Sprintf("%0.2f removed from the wallet", amount)
+
+	if err := service.transactionservice.CreateTransaction(uow, userToWthdrawMoney.ID, amount, transactionType, note); err != nil {
+		uow.RollBack()
+		return errors.NewDatabaseError("unable to create transaction")
 	}
 
 	uow.Commit()
@@ -329,6 +397,23 @@ func (service *UserService) GetAllTransactions(transactions *[]transaction.Trans
 	return nil
 }
 
+func (service *UserService) GetWalletAmount(user *user.UserDTO) error {
+
+	if err := service.doesUserExist(user.ID); err != nil {
+		return errors.NewDatabaseError("user not found with given id")
+	}
+
+	uow := repository.NewUnitOfWork(service.db, true)
+	defer uow.RollBack()
+
+	if err := service.repository.GetRecordByID(uow, user.ID, user); err != nil {
+		return errors.NewDatabaseError("Unable to fetch wallet amount for this user")
+	}
+
+	uow.Commit()
+	return nil
+}
+
 func (service *UserService) GetSubscription(subscriptions *[]subscription.Subscription, totalCount *int, limit, offset int, userID uuid.UUID) error {
 	if userID == uuid.Nil {
 		return errors.NewValidationError("User ID is not valid")
@@ -391,7 +476,11 @@ func (service *UserService) RenewUrls(userToUpdate *user.User) error {
 		return err
 	}
 
-	if err := service.transactionservice.CreateTransaction(uow, existingUser.ID, totalPriceToRenew); err != nil {
+	//transaction--------------------------------------------------------------------------------------------------
+	var transactionType = "URLRENEWAL"
+	var note = fmt.Sprintf("%d url renewed for %0.2f per url renewal price", userToUpdate.UrlCount, subscription.NewUrlPrice)
+
+	if err := service.transactionservice.CreateTransaction(uow, existingUser.ID, totalPriceToRenew, transactionType, note); err != nil {
 		uow.RollBack()
 		return errors.NewDatabaseError("unable to create transaction")
 	}

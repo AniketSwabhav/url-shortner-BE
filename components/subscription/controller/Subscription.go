@@ -27,7 +27,7 @@ func NewSubscriptionrController(userService *subscriptionService.SubscriptionSer
 
 func (SubscriptionController *SubscriptionController) RegisterRoutes(router *mux.Router) {
 
-	userRouter := router.PathPrefix("/user").Subrouter()
+	userRouter := router.PathPrefix("/user/{userId}").Subrouter()
 	guardedRouter := userRouter.PathPrefix("/").Subrouter()
 
 	guardedRouter.HandleFunc("/subscription", SubscriptionController.setSubscriptionPrice).Methods(http.MethodPost)
@@ -39,6 +39,7 @@ func (SubscriptionController *SubscriptionController) RegisterRoutes(router *mux
 
 func (controller *SubscriptionController) setSubscriptionPrice(w http.ResponseWriter, r *http.Request) {
 
+	parser := web.NewParser(r)
 	subscriptionPrices := subscription.Subscription{}
 
 	err := web.UnmarshalJSON(r, &subscriptionPrices)
@@ -53,15 +54,26 @@ func (controller *SubscriptionController) setSubscriptionPrice(w http.ResponseWr
 		return
 	}
 
-	subscriptionPrices.CreatedBy, err = security.ExtractUserIDFromToken(r)
+	userIdFromURL, err := parser.GetUUID("userId")
+	if err != nil {
+		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
+		return
+	}
+
+	userIdFromToken, err := security.ExtractUserIDFromToken(r)
 	if err != nil {
 		controller.log.Error(err.Error())
 		web.RespondError(w, err)
 		return
 	}
+	subscriptionPrices.CreatedBy = userIdFromToken
 
-	err = controller.SubscriptionService.SetSubscriptionPrice(&subscriptionPrices)
-	if err != nil {
+	if userIdFromURL != userIdFromToken {
+		web.RespondError(w, errors.NewUnauthorizedError("you are not authorized to set subscription prizes"))
+		return
+	}
+
+	if err = controller.SubscriptionService.SetSubscriptionPrice(&subscriptionPrices); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -71,10 +83,28 @@ func (controller *SubscriptionController) setSubscriptionPrice(w http.ResponseWr
 
 func (controller *SubscriptionController) getSubscriptionPrice(w http.ResponseWriter, r *http.Request) {
 
+	parser := web.NewParser(r)
 	subscriptionPrices := subscription.Subscription{}
 
-	err := controller.SubscriptionService.GetPrice(&subscriptionPrices)
+	userIdFromURL, err := parser.GetUUID("userId")
 	if err != nil {
+		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
+		return
+	}
+
+	userIdFromToken, err := security.ExtractUserIDFromToken(r)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
+	if userIdFromURL != userIdFromToken {
+		web.RespondError(w, errors.NewUnauthorizedError("you are not authorized to view subscription prizes"))
+		return
+	}
+
+	if err := controller.SubscriptionService.GetPrice(&subscriptionPrices); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		fmt.Println(err)
 		return
@@ -84,6 +114,7 @@ func (controller *SubscriptionController) getSubscriptionPrice(w http.ResponseWr
 }
 
 func (controller *SubscriptionController) updateSubscriptionPrice(w http.ResponseWriter, r *http.Request) {
+	parser := web.NewParser(r)
 	subscriptionPrices := subscription.Subscription{}
 
 	err := web.UnmarshalJSON(r, &subscriptionPrices)
@@ -98,15 +129,26 @@ func (controller *SubscriptionController) updateSubscriptionPrice(w http.Respons
 		return
 	}
 
-	subscriptionPrices.UpdatedBy, err = security.ExtractUserIDFromToken(r)
+	userIdFromURL, err := parser.GetUUID("userId")
+	if err != nil {
+		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
+		return
+	}
+
+	userIdFromToken, err := security.ExtractUserIDFromToken(r)
 	if err != nil {
 		controller.log.Error(err.Error())
 		web.RespondError(w, err)
 		return
 	}
+	subscriptionPrices.UpdatedBy = userIdFromToken
 
-	err = controller.SubscriptionService.UpdateSubscriptionPrice(&subscriptionPrices)
-	if err != nil {
+	if userIdFromURL != userIdFromToken {
+		web.RespondError(w, errors.NewUnauthorizedError("you are not authorized to update subscription prizes"))
+		return
+	}
+
+	if err = controller.SubscriptionService.UpdateSubscriptionPrice(&subscriptionPrices); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

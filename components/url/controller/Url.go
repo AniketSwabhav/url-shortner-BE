@@ -79,8 +79,7 @@ func (controller *UrlController) registerUrl(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	err = controller.UrlService.CreateUrl(userIdFromURL, UrlOwner, newUrl)
-	if err != nil {
+	if err = controller.UrlService.CreateUrl(userIdFromURL, UrlOwner, newUrl); err != nil {
 		controller.log.Print(err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -102,7 +101,7 @@ func (controller *UrlController) redirectUrl(w http.ResponseWriter, r *http.Requ
 	}
 	urlToRedirect.ShortUrl = shortUrlFromPrams
 
-	if err = controller.UrlService.RedirectToUrll(&urlToRedirect); err != nil {
+	if err = controller.UrlService.RedirectToUrl(&urlToRedirect); err != nil {
 		controller.log.Print(err.Error())
 		web.RespondError(w, err)
 		return
@@ -190,8 +189,7 @@ func (controller *UrlController) getUrlById(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	err = controller.UrlService.GetUrlByID(targetURL)
-	if err != nil {
+	if err = controller.UrlService.GetUrlByID(targetURL); err != nil {
 		web.RespondError(w, err)
 		return
 	}
@@ -273,8 +271,7 @@ func (controller *UrlController) updateUrlById(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	err = controller.UrlService.UpdateUrl(targetUrl)
-	if err != nil {
+	if err = controller.UrlService.UpdateUrl(targetUrl); err != nil {
 		web.RespondError(w, err)
 		return
 	}
@@ -300,8 +297,7 @@ func (controller *UrlController) deleteUrlById(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	err = controller.UrlService.Delete(urlID, deletedBy)
-	if err != nil {
+	if err = controller.UrlService.Delete(urlID, deletedBy); err != nil {
 		controller.log.Error(err.Error())
 		web.RespondError(w, err)
 		return
@@ -337,8 +333,7 @@ func (controller *UrlController) renewUrlVisits(w http.ResponseWriter, r *http.R
 	}
 	urlToRenew.UpdatedBy = urlToRenew.UserID
 
-	err = controller.UrlService.RenewUrlVisits(urlToRenew)
-	if err != nil {
+	if err = controller.UrlService.RenewUrlVisits(urlToRenew); err != nil {
 		web.RespondError(w, err)
 		return
 	}

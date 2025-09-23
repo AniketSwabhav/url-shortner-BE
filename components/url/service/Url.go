@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"time"
 	"url-shortner-be/components/errors"
 	transactionserv "url-shortner-be/components/transaction/service"
@@ -115,7 +116,7 @@ func (service *UrlService) CreateUrl(userId uuid.UUID, urlOwner *user.User, newU
 // 	return url.LongUrl, nil
 // }
 
-func (service *UrlService) RedirectToUrll(urlToRedirect *url.Url) error {
+func (service *UrlService) RedirectToUrl(urlToRedirect *url.Url) error {
 	uow := repository.NewUnitOfWork(service.db, true)
 	defer uow.RollBack()
 
@@ -192,7 +193,11 @@ func (service *UrlService) RenewUrlVisits(urlToRenew *url.Url) error {
 		return errors.NewDatabaseError("unable to renew url visits")
 	}
 
-	if err := service.transactionservice.CreateTransaction(uow, urlOwner.ID, totalPriceToRenew); err != nil {
+	// //transaction--------------------------------------------------------------------------------------------------
+	var transactionType = "VISITSRENEWAL"
+	var note = fmt.Sprintf("%d visits renewed for %0.2f per visit price", urlToRenew.Visits, subscription.ExtraVisitPrice)
+
+	if err := service.transactionservice.CreateTransaction(uow, urlOwner.ID, totalPriceToRenew, transactionType, note); err != nil {
 		uow.RollBack()
 		return errors.NewDatabaseError("unable to create transaction")
 	}
