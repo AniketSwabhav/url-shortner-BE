@@ -173,6 +173,14 @@ func Order(column string) QueryProcessor {
 	}
 }
 
+// CombineQueries will process slice of queryprocessors and return single queryprocessor.
+func CombineQueries(queryProcessors []QueryProcessor) QueryProcessor {
+	return func(db *gorm.DB, out interface{}) (*gorm.DB, error) {
+		tempDB, err := executeQueryProcessors(db, out, queryProcessors...)
+		return tempDB, err
+	}
+}
+
 func DoesEmailExist(db *gorm.DB, email string, out interface{}, queryProcessors ...QueryProcessor) (bool, error) {
 	if email == "" {
 		return false, errors.NewNotFoundError("email not present")
