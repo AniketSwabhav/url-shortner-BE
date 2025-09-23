@@ -206,6 +206,11 @@ func (controller *UserController) updateUserById(w http.ResponseWriter, r *http.
 
 func (controller *UserController) getAllUsers(w http.ResponseWriter, r *http.Request) {
 	allUsers := &[]user.UserDTO{}
+
+	//var user [] string
+	// user:= [5]int{1,2,4}
+	//var arr [3]string
+	//arr[2]={"brijesh"}
 	var totalCount int
 	query := r.URL.Query()
 

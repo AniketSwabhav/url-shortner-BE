@@ -13,18 +13,17 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
+// Claims defines the JWT claims structure
 type Claims struct {
-	UserID   uuid.UUID
+	UserID   string `json:"UserID"` // Store UUID as string
 	IsAdmin  bool
 	IsActive bool
 	jwt.StandardClaims
 }
 
+// GenerateToken generates a signed JWT token
 func (c *Claims) GenerateToken() (string, error) {
-	// NewWithClaims returns token
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, c)
-
-	// access token string based on token
 	tokenString, err := token.SignedString([]byte(config.JWTKey.GetStringValue()))
 	if err != nil {
 		log.GetLogger().Error(err.Error())
@@ -33,31 +32,32 @@ func (c *Claims) GenerateToken() (string, error) {
 	return tokenString, nil
 }
 
+// ExtractUserIDFromToken extracts the UUID from the JWT token in the request header
 func ExtractUserIDFromToken(r *http.Request) (uuid.UUID, error) {
-
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
 		return uuid.Nil, errors.NewHTTPError("token not provided", http.StatusUnauthorized)
 	}
 
-	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-	tokenStr = strings.TrimSpace(tokenStr)
-
+	tokenStr := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
 	fmt.Println("Extracted Token: ", tokenStr)
 
-	token, err := jwt.Parse(tokenStr,
-		func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, errors.NewHTTPError(errors.ErrorCodeInternalError, http.StatusInternalServerError)
-			}
-			return []byte(config.JWTKey.GetStringValue()), nil
-		})
+	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.NewHTTPError(errors.ErrorCodeInternalError, http.StatusInternalServerError)
+		}
+		return []byte(config.JWTKey.GetStringValue()), nil
+	})
 	if err != nil {
 		return uuid.Nil, errors.NewHTTPError(err.Error(), http.StatusUnauthorized)
 	}
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-		id, _ := claims["UserID"].(string)
+		id, ok := claims["UserID"].(string)
+		if !ok || id == "" {
+			return uuid.Nil, errors.NewHTTPError("Invalid user ID in token", http.StatusUnauthorized)
+		}
+
 		userID, err := util.ParseUUID(id)
 		if err != nil {
 			return uuid.Nil, err
