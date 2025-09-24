@@ -147,7 +147,7 @@ func (service *UserService) Login(userCredential *credential.Credential, claim *
 	}
 
 	*claim = security.Claims{
-		UserID:   foundUser.ID,
+		UserID:   foundUser.ID.String(),
 		IsAdmin:  *foundUser.IsAdmin,
 		IsActive: *foundUser.IsActive,
 		StandardClaims: jwt.StandardClaims{
