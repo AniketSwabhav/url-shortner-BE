@@ -3,6 +3,7 @@ package web
 import (
 	"net/http"
 	"net/url"
+	"strconv"
 	"url-shortner-be/components/errors"
 
 	"github.com/gorilla/mux"
@@ -50,4 +51,25 @@ func (p *Parser) GetString(paramName string) (string, error) {
 		return "", errors.NewValidationError(paramName + " cannot be empty")
 	}
 	return value, nil
+}
+
+// ParseLimitAndOffset will parse limit and offset from query params.
+func (p *Parser) ParseLimitAndOffset() (limit, offset int) {
+	limitparam := p.Form.Get("limit")
+	offsetparam := p.Form.Get("offset")
+	var err error
+	limit = 5
+	if len(limitparam) > 0 {
+		limit, err = strconv.Atoi(limitparam)
+		if err != nil {
+			return
+		}
+	}
+	if len(offsetparam) > 0 {
+		offset, err = strconv.Atoi(offsetparam)
+		if err != nil {
+			return
+		}
+	}
+	return
 }

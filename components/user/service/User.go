@@ -3,10 +3,12 @@ package service
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 	"url-shortner-be/components/errors"
 	"url-shortner-be/components/security"
 	transactionserv "url-shortner-be/components/transaction/service"
+	"url-shortner-be/components/web"
 	"url-shortner-be/model/credential"
 	"url-shortner-be/model/stats"
 	"url-shortner-be/model/subscription"
@@ -23,6 +25,7 @@ import (
 
 const cost = 10
 
+type Values map[string][]string
 type UserService struct {
 	db                 *gorm.DB
 	repository         repository.Repository
@@ -169,26 +172,46 @@ func (service *UserService) GetUserByID(targetUser *user.UserDTO) error {
 	return nil
 }
 
-func (service *UserService) GetAllUsers(allUsers *[]user.UserDTO, totalCount *int, limit, offset int) error {
+func (service *UserService) GetAllUsers(allUsers *[]user.UserDTO, parser *web.Parser, totalCount *int) error {
+	var queryProcessors []repository.QueryProcessor
+	limit, offset := parser.ParseLimitAndOffset()
+
 	uow := repository.NewUnitOfWork(service.db, true)
 	defer uow.RollBack()
 
-	err := service.repository.GetAll(
-		uow,
-		allUsers,
-		repository.PreloadAssociations([]string{"Credentials", "Url", "Transactions"}),
+	queryProcessors = append(queryProcessors, repository.PreloadAssociations([]string{"Credentials", "Url", "Transactions"}),
+		service.addSearchQueries(parser.Form),
 		repository.Paginate(limit, offset, totalCount))
+
+	err := service.repository.GetAll(uow, allUsers, queryProcessors...)
 	if err != nil {
 		return errors.NewDatabaseError("error getting all users")
 	}
 
-	err = service.repository.GetCount(uow, allUsers, totalCount)
-	if err != nil {
-		return err
-	}
-
 	uow.Commit()
 	return nil
+}
+
+func (service *UserService) addSearchQueries(requestForm url.Values) repository.QueryProcessor {
+
+	var queryProcessors []repository.QueryProcessor
+
+	if len(requestForm) == 0 {
+		return nil
+	}
+
+	// var columnNames []string
+	// var conditions []string
+	// var operators []string
+	// var values []interface{}
+
+	// if _, ok := requestForm["firstName"]; ok {
+	// 	util.AddToSlice("`first_name`", "LIKE ?", "OR", "%"+requestForm.Get("firstName")+"%", &columnNames, &conditions, &operators, &values)
+	// }
+
+	queryProcessors = append(queryProcessors, repository.Filter("first_name LIKE (?)", "%"+requestForm.Get("firstName")+"%"))
+
+	return repository.CombineQueries(queryProcessors)
 }
 
 func (service *UserService) UpdateUser(targetUser *user.User) error {

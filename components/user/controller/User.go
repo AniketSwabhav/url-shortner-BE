@@ -53,7 +53,7 @@ func (userController *UserController) RegisterRoutes(router *mux.Router) {
 	userguardedRouter.HandleFunc("/{userId}/transactions", userController.getTransactionByUserId).Methods(http.MethodGet)
 	userguardedRouter.HandleFunc("/{userId}/amount", userController.getwalletAmount).Methods(http.MethodGet)
 
-	adminguardedRouter.HandleFunc("/{userId}", userController.getAllUsers).Methods(http.MethodGet)
+	adminguardedRouter.HandleFunc("/", userController.getAllUsers).Methods(http.MethodGet)
 	adminguardedRouter.HandleFunc("/monthwise-records", userController.getMonthWiseRecords).Methods(http.MethodGet)
 	adminguardedRouter.HandleFunc("/{userId}", userController.getUserByID).Methods(http.MethodGet)
 	adminguardedRouter.HandleFunc("/{userId}", userController.updateUserById).Methods(http.MethodPut)
@@ -219,48 +219,12 @@ func (controller *UserController) updateUserById(w http.ResponseWriter, r *http.
 }
 
 func (controller *UserController) getAllUsers(w http.ResponseWriter, r *http.Request) {
-	allUsers := &[]user.UserDTO{}
+	allUsers := []user.UserDTO{}
 
-	//var user [] string
-	// user:= [5]int{1,2,4}
-	//var arr [3]string
-	//arr[2]={"brijesh"}
 	var totalCount int
-	query := r.URL.Query()
 	parser := web.NewParser(r)
 
-	limitStr := query.Get("limit")
-	offsetStr := query.Get("offset")
-
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit <= 0 {
-		limit = 5
-	}
-
-	offset, err := strconv.Atoi(offsetStr)
-	if err != nil || offset < 0 {
-		offset = 0
-	}
-
-	userIdFromURL, err := parser.GetUUID("userId")
-	if err != nil {
-		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
-		return
-	}
-
-	userIdFromToken, err := security.ExtractUserIDFromToken(r)
-	if err != nil {
-		controller.log.Error(err.Error())
-		web.RespondError(w, err)
-		return
-	}
-
-	if userIdFromURL != userIdFromToken {
-		web.RespondError(w, errors.NewUnauthorizedError("you are not authorized to view all users"))
-		return
-	}
-
-	if err = controller.UserService.GetAllUsers(allUsers, &totalCount, limit, offset); err != nil {
+	if err := controller.UserService.GetAllUsers(&allUsers, parser, &totalCount); err != nil {
 		controller.log.Print(err.Error())
 		web.RespondError(w, err)
 		return
