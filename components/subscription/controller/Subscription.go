@@ -27,7 +27,7 @@ func NewSubscriptionrController(userService *subscriptionService.SubscriptionSer
 
 func (SubscriptionController *SubscriptionController) RegisterRoutes(router *mux.Router) {
 
-	userRouter := router.PathPrefix("/user/{userId}").Subrouter()
+	userRouter := router.PathPrefix("/url").Subrouter()
 	guardedRouter := userRouter.PathPrefix("/").Subrouter()
 
 	guardedRouter.HandleFunc("/subscription", SubscriptionController.setSubscriptionPrice).Methods(http.MethodPost)
@@ -39,7 +39,7 @@ func (SubscriptionController *SubscriptionController) RegisterRoutes(router *mux
 
 func (controller *SubscriptionController) setSubscriptionPrice(w http.ResponseWriter, r *http.Request) {
 
-	parser := web.NewParser(r)
+	// parser := web.NewParser(r)
 	subscriptionPrices := subscription.Subscription{}
 
 	err := web.UnmarshalJSON(r, &subscriptionPrices)
@@ -54,11 +54,11 @@ func (controller *SubscriptionController) setSubscriptionPrice(w http.ResponseWr
 		return
 	}
 
-	userIdFromURL, err := parser.GetUUID("userId")
-	if err != nil {
-		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
-		return
-	}
+	// userIdFromURL, err := parser.GetUUID("userId")
+	// if err != nil {
+	// 	web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
+	// 	return
+	// }
 
 	userIdFromToken, err := security.ExtractUserIDFromToken(r)
 	if err != nil {
@@ -68,10 +68,10 @@ func (controller *SubscriptionController) setSubscriptionPrice(w http.ResponseWr
 	}
 	subscriptionPrices.CreatedBy = userIdFromToken
 
-	if userIdFromURL != userIdFromToken {
-		web.RespondError(w, errors.NewUnauthorizedError("you are not authorized to set subscription prizes"))
-		return
-	}
+	// if userIdFromURL != userIdFromToken {
+	// 	web.RespondError(w, errors.NewUnauthorizedError("you are not authorized to set subscription prizes"))
+	// 	return
+	// }
 
 	if err = controller.SubscriptionService.SetSubscriptionPrice(&subscriptionPrices); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -83,26 +83,26 @@ func (controller *SubscriptionController) setSubscriptionPrice(w http.ResponseWr
 
 func (controller *SubscriptionController) getSubscriptionPrice(w http.ResponseWriter, r *http.Request) {
 
-	parser := web.NewParser(r)
+	// parser := web.NewParser(r)
 	subscriptionPrices := subscription.Subscription{}
 
-	userIdFromURL, err := parser.GetUUID("userId")
-	if err != nil {
-		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
-		return
-	}
+	// userIdFromURL, err := parser.GetUUID("userId")
+	// if err != nil {
+	// 	web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
+	// 	return
+	// }
 
-	userIdFromToken, err := security.ExtractUserIDFromToken(r)
-	if err != nil {
-		controller.log.Error(err.Error())
-		web.RespondError(w, err)
-		return
-	}
+	// userIdFromToken, err := security.ExtractUserIDFromToken(r)
+	// if err != nil {
+	// 	controller.log.Error(err.Error())
+	// 	web.RespondError(w, err)
+	// 	return
+	// }
 
-	if userIdFromURL != userIdFromToken {
-		web.RespondError(w, errors.NewUnauthorizedError("you are not authorized to view subscription prizes"))
-		return
-	}
+	// if userIdFromURL != userIdFromToken {
+	// 	web.RespondError(w, errors.NewUnauthorizedError("you are not authorized to view subscription prizes"))
+	// 	return
+	// }
 
 	if err := controller.SubscriptionService.GetPrice(&subscriptionPrices); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -114,7 +114,7 @@ func (controller *SubscriptionController) getSubscriptionPrice(w http.ResponseWr
 }
 
 func (controller *SubscriptionController) updateSubscriptionPrice(w http.ResponseWriter, r *http.Request) {
-	parser := web.NewParser(r)
+	// parser := web.NewParser(r)
 	subscriptionPrices := subscription.Subscription{}
 
 	err := web.UnmarshalJSON(r, &subscriptionPrices)
@@ -129,11 +129,11 @@ func (controller *SubscriptionController) updateSubscriptionPrice(w http.Respons
 		return
 	}
 
-	userIdFromURL, err := parser.GetUUID("userId")
-	if err != nil {
-		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
-		return
-	}
+	// userIdFromURL, err := parser.GetUUID("userId")
+	// if err != nil {
+	// 	web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
+	// 	return
+	// }
 
 	userIdFromToken, err := security.ExtractUserIDFromToken(r)
 	if err != nil {
@@ -143,10 +143,10 @@ func (controller *SubscriptionController) updateSubscriptionPrice(w http.Respons
 	}
 	subscriptionPrices.UpdatedBy = userIdFromToken
 
-	if userIdFromURL != userIdFromToken {
-		web.RespondError(w, errors.NewUnauthorizedError("you are not authorized to update subscription prizes"))
-		return
-	}
+	// if userIdFromURL != userIdFromToken {
+	// 	web.RespondError(w, errors.NewUnauthorizedError("you are not authorized to update subscription prizes"))
+	// 	return
+	// }
 
 	if err = controller.SubscriptionService.UpdateSubscriptionPrice(&subscriptionPrices); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

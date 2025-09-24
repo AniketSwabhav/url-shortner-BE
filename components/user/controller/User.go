@@ -35,7 +35,7 @@ func NewUserController(userService *userService.UserService, log log.Logger) *Us
 func (userController *UserController) RegisterRoutes(router *mux.Router) {
 	// router.HandleFunc("/login", userController.Login).Methods(http.MethodPost)
 
-	userRouter := router.PathPrefix("/user").Subrouter()
+	userRouter := router.PathPrefix("/users").Subrouter()
 	unguardedRouter := userRouter.PathPrefix("/").Subrouter()
 	userguardedRouter := userRouter.PathPrefix("/").Subrouter()
 	adminguardedRouter := userRouter.PathPrefix("/").Subrouter()

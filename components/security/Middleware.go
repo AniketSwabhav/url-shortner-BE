@@ -22,7 +22,7 @@ func MiddlewareAdmin(next http.Handler) http.Handler {
 
 		if !claim.IsAdmin {
 			fmt.Println("User is not Admin")
-			web.RespondError(w, errors.NewUnauthorizedError("Only admin can access this resource"))
+			web.RespondError(w, errors.NewUnauthorizedError("Only admin can access this resource======================>"))
 			return
 		}
 
