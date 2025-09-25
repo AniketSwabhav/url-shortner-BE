@@ -37,7 +37,6 @@ func (urlController *UrlController) RegisterRoutes(router *mux.Router) {
 
 	urlRouter.HandleFunc("/register", urlController.registerUrl).Methods(http.MethodPost)
 	urlRouter.HandleFunc("/", urlController.getAllUrlsByUserId).Methods(http.MethodGet)
-	//add api to get all urls of all users (adminguarded)
 	urlRouter.HandleFunc("/short-url", urlController.getUrlByShortUrl).Methods(http.MethodPost)
 	urlRouter.HandleFunc("/{urlId}", urlController.getUrlById).Methods(http.MethodGet)
 	urlRouter.HandleFunc("/{urlId}", urlController.updateUrlById).Methods(http.MethodPut)

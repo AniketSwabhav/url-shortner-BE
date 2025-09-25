@@ -129,21 +129,25 @@ func (service *UserService) Login(userCredential *credential.Credential, claim *
 		return errors.NewDatabaseError("Error checking if email exists")
 	}
 	if !exists {
-		return errors.NewNotFoundError("Email not found")
+		return errors.NewValidationError("Invalid credentials")
 	}
 
-	var foundCredential credential.Credential
-	if err := uow.DB.Where("email = ?", userCredential.Email).First(&foundCredential).Error; err != nil {
+	foundCredentials := credential.Credential{}
+	if err := uow.DB.Where("email = ?", userCredential.Email).First(&foundCredentials).Error; err != nil {
 		return errors.NewDatabaseError("Could not retrieve credentials")
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(foundCredential.Password), []byte(userCredential.Password)); err != nil {
-		return errors.NewInValidPasswordError("Incorrect password")
+	if err := bcrypt.CompareHashAndPassword([]byte(foundCredentials.Password), []byte(userCredential.Password)); err != nil {
+		return errors.NewHTTPError("Invalid credentials", http.StatusUnauthorized)
 	}
 
 	var foundUser user.User
-	if err := uow.DB.Preload("Credentials").Where("id = ?", foundCredential.UserID).First(&foundUser).Error; err != nil {
+	if err := uow.DB.Preload("Credentials").Where("id = ?", foundCredentials.UserID).First(&foundUser).Error; err != nil {
 		return errors.NewDatabaseError("Could not retrieve user")
+	}
+
+	if !*foundUser.IsActive {
+		errors.NewValidationError("user is inactive ")
 	}
 
 	*claim = security.Claims{
@@ -159,11 +163,27 @@ func (service *UserService) Login(userCredential *credential.Credential, claim *
 	return nil
 }
 
-func (service *UserService) GetUserByID(targetUser *user.UserDTO) error {
+func (service *UserService) GetUserByID(targetUser *user.UserDTO, tokenUserId uuid.UUID) error {
 	uow := repository.NewUnitOfWork(service.db, true)
 	defer uow.RollBack()
 
-	err := service.repository.GetRecordByID(uow, targetUser.ID, targetUser, repository.PreloadAssociations([]string{"Credentials", "Url", "Transactions"}))
+	// Step 1: Get token user (who is making the request)
+	var requestingUser user.User
+	if err := service.repository.GetRecordByID(uow, tokenUserId, &requestingUser); err != nil {
+		return errors.NewUnauthorizedError("invalid user making the request")
+	}
+
+	// Step 2: Access control logic
+	isAdmin := requestingUser.IsAdmin != nil && *requestingUser.IsAdmin
+	isSameUser := targetUser.ID == tokenUserId
+
+	if !isSameUser && !isAdmin {
+		return errors.NewUnauthorizedError("you are not authorized to view this user data")
+	}
+
+	// Step 3: Fetch target user data
+	err := service.repository.GetRecordByID(uow, targetUser.ID, targetUser,
+		repository.PreloadAssociations([]string{"Credentials", "Url", "Transactions"}))
 	if err != nil {
 		return errors.NewDatabaseError("error getting user data")
 	}
