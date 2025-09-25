@@ -27,14 +27,17 @@ func NewSubscriptionrController(userService *subscriptionService.SubscriptionSer
 
 func (SubscriptionController *SubscriptionController) RegisterRoutes(router *mux.Router) {
 
-	userRouter := router.PathPrefix("/url").Subrouter()
-	guardedRouter := userRouter.PathPrefix("/").Subrouter()
+	subscriptionRouter := router.PathPrefix("/url").Subrouter()
+	guardedRouter := subscriptionRouter.PathPrefix("/").Subrouter()
+	commonRouter := subscriptionRouter.PathPrefix("/").Subrouter()
+
+	commonRouter.HandleFunc("/subscription", SubscriptionController.getSubscriptionPrice).Methods(http.MethodGet)
 
 	guardedRouter.HandleFunc("/subscription", SubscriptionController.setSubscriptionPrice).Methods(http.MethodPost)
-	guardedRouter.HandleFunc("/subscription", SubscriptionController.getSubscriptionPrice).Methods(http.MethodGet)
 	guardedRouter.HandleFunc("/subscription/update", SubscriptionController.updateSubscriptionPrice).Methods(http.MethodPut)
 
 	guardedRouter.Use(security.MiddlewareAdmin)
+	commonRouter.Use(security.MiddlewareCommon)
 }
 
 func (controller *SubscriptionController) setSubscriptionPrice(w http.ResponseWriter, r *http.Request) {

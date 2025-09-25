@@ -33,15 +33,13 @@ func NewUserController(userService *userService.UserService, log log.Logger) *Us
 }
 
 func (userController *UserController) RegisterRoutes(router *mux.Router) {
-	// router.HandleFunc("/login", userController.Login).Methods(http.MethodPost)
 
 	userRouter := router.PathPrefix("/users").Subrouter()
 	unguardedRouter := userRouter.PathPrefix("/").Subrouter()
 	userguardedRouter := userRouter.PathPrefix("/").Subrouter()
 	adminguardedRouter := userRouter.PathPrefix("/").Subrouter()
 
-	// commonRouter := userRouter.PathPrefix("/").Subrouter()
-	// commonRouter.Use(security.MiddlewareCommon)
+	commonRouter := userRouter.PathPrefix("/").Subrouter()
 
 	unguardedRouter.HandleFunc("/login", userController.login).Methods(http.MethodPost)
 	unguardedRouter.HandleFunc("/register-user", userController.registerUser).Methods(http.MethodPost)
@@ -52,17 +50,19 @@ func (userController *UserController) RegisterRoutes(router *mux.Router) {
 	userguardedRouter.HandleFunc("/{userId}/renew-urls", userController.renewUrlsByUserId).Methods(http.MethodPost)
 	userguardedRouter.HandleFunc("/{userId}/transactions", userController.getTransactionByUserId).Methods(http.MethodGet)
 	userguardedRouter.HandleFunc("/{userId}/amount", userController.getwalletAmount).Methods(http.MethodGet)
+	userguardedRouter.HandleFunc("/{userId}", userController.updateUserById).Methods(http.MethodPut)
+
+	commonRouter.HandleFunc("/{userId}", userController.getUserByID).Methods(http.MethodGet)
 
 	adminguardedRouter.HandleFunc("/", userController.getAllUsers).Methods(http.MethodGet)
 	adminguardedRouter.HandleFunc("/monthwise-records", userController.getMonthWiseRecords).Methods(http.MethodGet)
-	adminguardedRouter.HandleFunc("/{userId}", userController.getUserByID).Methods(http.MethodGet)
-	adminguardedRouter.HandleFunc("/{userId}", userController.updateUserById).Methods(http.MethodPut)
 	adminguardedRouter.HandleFunc("/{userId}", userController.deleteUserById).Methods(http.MethodDelete)
 	adminguardedRouter.HandleFunc("/{userId}/subcription", userController.getSubscription).Methods(http.MethodGet)
 	// adminguardedRouter.HandleFunc("/{userId}/all-user-transactions", userController.getAllUserTransactions).Methods(http.MethodGet)
 
 	userguardedRouter.Use(security.MiddlewareUser)
 	adminguardedRouter.Use(security.MiddlewareAdmin)
+	commonRouter.Use(security.MiddlewareCommon)
 
 }
 
@@ -161,12 +161,7 @@ func (controller *UserController) getUserByID(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if userIdFromURL != userIdFromToken {
-		web.RespondError(w, errors.NewUnauthorizedError("you are not authorized to view user details"))
-		return
-	}
-
-	if err = controller.UserService.GetUserByID(targetUser); err != nil {
+	if err = controller.UserService.GetUserByID(targetUser, userIdFromToken); err != nil {
 		web.RespondError(w, err)
 		return
 	}
