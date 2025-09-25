@@ -212,26 +212,43 @@ func (service *UserService) GetAllUsers(allUsers *[]user.UserDTO, parser *web.Pa
 	return nil
 }
 
+// func (service *UserService) addSearchQueries(requestForm url.Values) repository.QueryProcessor {
+
+// 	var queryProcessors []repository.QueryProcessor
+
+// 	if len(requestForm) == 0 {
+// 		return nil
+// 	}
+
+// 	// var columnNames []string
+// 	// var conditions []string
+// 	// var operators []string
+// 	// var values []interface{}
+
+// 	// if _, ok := requestForm["firstName"]; ok {
+// 	// 	util.AddToSlice("`first_name`", "LIKE ?", "OR", "%"+requestForm.Get("firstName")+"%", &columnNames, &conditions, &operators, &values)
+// 	// }
+
+// 	queryProcessors = append(queryProcessors, repository.Filter("first_name LIKE (?)", "%"+requestForm.Get("firstName")+"%"))
+
+// 	return repository.CombineQueries(queryProcessors)
+// }
+
+
 func (service *UserService) addSearchQueries(requestForm url.Values) repository.QueryProcessor {
+    searchTerm := requestForm.Get("search")
+    if searchTerm == "" {
+        return repository.QueryProcessor(func(db *gorm.DB, out interface{}) (*gorm.DB, error) {
+            return db.Find(out), nil
+        })
+    }
 
-	var queryProcessors []repository.QueryProcessor
-
-	if len(requestForm) == 0 {
-		return nil
-	}
-
-	// var columnNames []string
-	// var conditions []string
-	// var operators []string
-	// var values []interface{}
-
-	// if _, ok := requestForm["firstName"]; ok {
-	// 	util.AddToSlice("`first_name`", "LIKE ?", "OR", "%"+requestForm.Get("firstName")+"%", &columnNames, &conditions, &operators, &values)
-	// }
-
-	queryProcessors = append(queryProcessors, repository.Filter("first_name LIKE (?)", "%"+requestForm.Get("firstName")+"%"))
-
-	return repository.CombineQueries(queryProcessors)
+    return repository.QueryProcessor(func(db *gorm.DB, out interface{}) (*gorm.DB, error) {
+        return db.Joins("JOIN credentials ON credentials.user_id = users.id").
+            Where("users.first_name LIKE ? OR users.last_name LIKE ? OR credentials.email LIKE ?",
+                "%"+searchTerm+"%", "%"+searchTerm+"%", "%"+searchTerm+"%").
+            Find(out), nil
+    })
 }
 
 func (service *UserService) UpdateUser(targetUser *user.User) error {

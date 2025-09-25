@@ -61,6 +61,8 @@ func (uow *UnitOfWork) Commit() {
 	}
 }
 
+
+
 func executeQueryProcessors(db *gorm.DB, out interface{}, queryProcessors ...QueryProcessor) (*gorm.DB, error) {
 	var err error
 	for _, query := range queryProcessors {
