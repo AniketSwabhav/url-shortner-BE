@@ -15,7 +15,7 @@ import (
 
 // Claims defines the JWT claims structure
 type Claims struct {
-	UserID   string `json:"UserID"` // Store UUID as string
+	UserID   string `json:"UserID"` 
 	IsAdmin  bool
 	IsActive bool
 	jwt.StandardClaims

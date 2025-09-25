@@ -45,7 +45,7 @@ func (userController *UserController) RegisterRoutes(router *mux.Router) {
 
 	unguardedRouter.HandleFunc("/login", userController.login).Methods(http.MethodPost)
 	unguardedRouter.HandleFunc("/register-user", userController.registerUser).Methods(http.MethodPost)
-	unguardedRouter.HandleFunc("/register-admin", userController.registerAdmin).Methods(http.MethodPost)
+	adminguardedRouter.HandleFunc("/register-admin", userController.registerAdmin).Methods(http.MethodPost)
 
 	userguardedRouter.HandleFunc("/{userId}/wallet/add", userController.addAmountToWallet).Methods(http.MethodPost)
 	userguardedRouter.HandleFunc("/{userId}/wallet/withdraw", userController.withdrawAmountFromWallet).Methods(http.MethodPost)
