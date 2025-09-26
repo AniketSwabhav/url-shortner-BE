@@ -468,7 +468,7 @@ func (controller *UserController) renewUrlsByUserId(w http.ResponseWriter, r *ht
 }
 
 func (controller *UserController) getMonthWiseRecords(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
+query := r.URL.Query()
 	value := query.Get("value")
 	yearStr := query.Get("year")
 
