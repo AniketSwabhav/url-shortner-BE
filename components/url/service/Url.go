@@ -208,7 +208,7 @@ func (service *UrlService) RenewUrlVisits(urlToRenew *url.Url) error {
 	return nil
 }
 
-func (service *UrlService) GetAllUrls(allUrl *[]url.UrlDTO, userId uuid.UUID, parser *web.Parser, totalCount *int) error {
+func (service *UrlService) GetAllUrls(allUrl *[]url.UrlDTO, totalCount *int, parser *web.Parser, userIdFromUrl, userIdFromToken uuid.UUID) error {
 
 	var queryProcessors []repository.QueryProcessor
 	limit, offset := parser.ParseLimitAndOffset()
@@ -216,7 +216,24 @@ func (service *UrlService) GetAllUrls(allUrl *[]url.UrlDTO, userId uuid.UUID, pa
 	uow := repository.NewUnitOfWork(service.db, true)
 	defer uow.RollBack()
 
-	queryProcessors = append(queryProcessors, repository.Filter("user_id = ?", userId),
+	actualUser := user.User{}
+	if err := service.repository.GetRecordByID(uow, userIdFromUrl, &actualUser); err != nil {
+		return errors.NewUnauthorizedError("invalid user making the request")
+	}
+
+	tokenUser := user.User{}
+	if err := service.repository.GetRecordByID(uow, userIdFromToken, &tokenUser); err != nil {
+		return errors.NewUnauthorizedError("invalid user making the request")
+	}
+
+	isAdmin := tokenUser.IsAdmin != nil && *tokenUser.IsAdmin
+	isSameUser := actualUser.ID == tokenUser.ID
+
+	if !isSameUser && !isAdmin {
+		return errors.NewUnauthorizedError("you are not authorized to view this user data")
+	}
+
+	queryProcessors = append(queryProcessors, repository.Filter("user_id = ?", actualUser.ID),
 		service.addSearchQueries(parser.Form),
 		repository.Paginate(limit, offset, totalCount))
 

@@ -48,11 +48,11 @@ func (userController *UserController) RegisterRoutes(router *mux.Router) {
 	userguardedRouter.HandleFunc("/{userId}/wallet/add", userController.addAmountToWallet).Methods(http.MethodPost)
 	userguardedRouter.HandleFunc("/{userId}/wallet/withdraw", userController.withdrawAmountFromWallet).Methods(http.MethodPost)
 	userguardedRouter.HandleFunc("/{userId}/renew-urls", userController.renewUrlsByUserId).Methods(http.MethodPost)
-	userguardedRouter.HandleFunc("/{userId}/transactions", userController.getTransactionByUserId).Methods(http.MethodGet)
 	userguardedRouter.HandleFunc("/{userId}/amount", userController.getwalletAmount).Methods(http.MethodGet)
 	userguardedRouter.HandleFunc("/{userId}", userController.updateUserById).Methods(http.MethodPut)
 
 	commonRouter.HandleFunc("/{userId}", userController.getUserByID).Methods(http.MethodGet)
+	commonRouter.HandleFunc("/{userId}/transactions", userController.getTransactionByUserId).Methods(http.MethodGet)
 
 	adminguardedRouter.HandleFunc("/", userController.getAllUsers).Methods(http.MethodGet)
 	adminguardedRouter.HandleFunc("/monthwise-records", userController.getMonthWiseRecords).Methods(http.MethodGet)
@@ -327,7 +327,6 @@ func (controller *UserController) getTransactionByUserId(w http.ResponseWriter, 
 	transactions := []transaction.Transaction{}
 	var totalCount int
 	parser := web.NewParser(r)
-	query := r.URL.Query()
 
 	userIdFromUrl, err := parser.GetUUID("userId")
 	if err != nil {
@@ -342,25 +341,7 @@ func (controller *UserController) getTransactionByUserId(w http.ResponseWriter, 
 		return
 	}
 
-	if userIdFromToken != userIdFromUrl {
-		web.RespondError(w, errors.NewUnauthorizedError("you are not authorized to view transactions for this user"))
-		return
-	}
-
-	limitStr := query.Get("limit")
-	offsetStr := query.Get("offset")
-
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit <= 0 {
-		limit = 5
-	}
-
-	offset, err := strconv.Atoi(offsetStr)
-	if err != nil || offset < 0 {
-		offset = 0
-	}
-
-	if err = controller.UserService.GetAllTransactions(&transactions, &totalCount, limit, offset, userIdFromUrl); err != nil {
+	if err = controller.UserService.GetAllTransactions(&transactions, &totalCount, parser, userIdFromUrl, userIdFromToken); err != nil {
 		web.RespondError(w, err)
 		return
 	}

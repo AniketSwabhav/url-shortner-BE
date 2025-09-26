@@ -33,16 +33,19 @@ func (urlcontroller *UrlController) RegisterRedirectRoute(router *mux.Router) {
 
 func (urlController *UrlController) RegisterRoutes(router *mux.Router) {
 
-	urlRouter := router.PathPrefix("/user/url").Subrouter()
+	urlRouter := router.PathPrefix("/url").Subrouter()
+	commonRouter := router.PathPrefix("/url").Subrouter()
 
 	urlRouter.HandleFunc("/register", urlController.registerUrl).Methods(http.MethodPost)
-	urlRouter.HandleFunc("/", urlController.getAllUrlsByUserId).Methods(http.MethodGet)
 	urlRouter.HandleFunc("/short-url", urlController.getUrlByShortUrl).Methods(http.MethodPost)
 	urlRouter.HandleFunc("/{urlId}", urlController.getUrlById).Methods(http.MethodGet)
 	urlRouter.HandleFunc("/{urlId}", urlController.updateUrlById).Methods(http.MethodPut)
 	urlRouter.HandleFunc("/{urlId}", urlController.deleteUrlById).Methods(http.MethodDelete)
 	urlRouter.HandleFunc("/{urlId}/renew-visits", urlController.renewUrlVisits).Methods(http.MethodPost)
 
+	commonRouter.HandleFunc("/user/{userId}", urlController.getAllUrlsByUserId).Methods(http.MethodGet)
+
+	commonRouter.Use(security.MiddlewareCommon)
 	urlRouter.Use(security.MiddlewareUser)
 
 }
@@ -118,11 +121,11 @@ func (controller *UrlController) getAllUrlsByUserId(w http.ResponseWriter, r *ht
 	var totalCount int
 	parser := web.NewParser(r)
 
-	// userIdFromURL, err := parser.GetUUID("userId")
-	// if err != nil {
-	// 	web.RespondError(w, errors.NewValidationError("Invalid User ID format"))
-	// 	return
-	// }
+	userIdFromURL, err := parser.GetUUID("userId")
+	if err != nil {
+		web.RespondError(w, errors.NewValidationError("Invalid User ID format"))
+		return
+	}
 
 	userIdFromToken, err := security.ExtractUserIDFromToken(r)
 	if err != nil {
@@ -131,12 +134,7 @@ func (controller *UrlController) getAllUrlsByUserId(w http.ResponseWriter, r *ht
 		return
 	}
 
-	// if userIdFromToken != userIdFromURL {
-	// 	web.RespondError(w, errors.NewUnauthorizedError("you are not authorized to view URLs of this user"))
-	// 	return
-	// }
-
-	if err = controller.UrlService.GetAllUrls(&allUrl, userIdFromToken, parser, &totalCount); err != nil {
+	if err = controller.UrlService.GetAllUrls(&allUrl, &totalCount, parser, userIdFromURL, userIdFromToken); err != nil {
 		controller.log.Print(err.Error())
 		web.RespondError(w, err)
 		return

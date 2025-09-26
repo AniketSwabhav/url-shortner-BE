@@ -417,19 +417,39 @@ func (service *UserService) WithdrawAmountFromWallet(userID uuid.UUID, amount fl
 	return nil
 }
 
-func (service *UserService) GetAllTransactions(transactions *[]transaction.Transaction, totalCount *int, limit, offset int, userID uuid.UUID) error {
+func (service *UserService) GetAllTransactions(transactions *[]transaction.Transaction, totalCount *int, parser *web.Parser, userIdFromUrl, userIdFromToken uuid.UUID) error {
 
-	if err := service.doesUserExist(userID); err != nil {
+	if err := service.doesUserExist(userIdFromUrl); err != nil {
 		return errors.NewDatabaseError("user not found with given id")
 	}
+
+	// var queryProcessors []repository.QueryProcessor
+	limit, offset := parser.ParseLimitAndOffset()
 
 	uow := repository.NewUnitOfWork(service.db, true)
 	defer uow.RollBack()
 
+	actualUser := user.User{}
+	if err := service.repository.GetRecordByID(uow, userIdFromUrl, &actualUser); err != nil {
+		return errors.NewUnauthorizedError("invalid user making the request")
+	}
+
+	tokenUser := user.User{}
+	if err := service.repository.GetRecordByID(uow, userIdFromToken, &tokenUser); err != nil {
+		return errors.NewUnauthorizedError("invalid user making the request")
+	}
+
+	isAdmin := tokenUser.IsAdmin != nil && *tokenUser.IsAdmin
+	isSameUser := actualUser.ID == tokenUser.ID
+
+	if !isSameUser && !isAdmin {
+		return errors.NewUnauthorizedError("you are not authorized to view this user data")
+	}
+
 	if err := service.repository.GetAll(
 		uow,
 		transactions,
-		repository.Filter("user_id = ?", userID),
+		repository.Filter("user_id = ?", actualUser.ID),
 		repository.Paginate(limit, offset, totalCount),
 		repository.Order("created_at desc"),
 	); err != nil {
