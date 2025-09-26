@@ -356,6 +356,8 @@ func (service *UserService) WithdrawMoneyFromWallet(userID uuid.UUID, userToWthd
 		return err
 	}
 
+
+
 	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
 
@@ -367,6 +369,10 @@ func (service *UserService) WithdrawMoneyFromWallet(userID uuid.UUID, userToWthd
 	if dbUser.ID != userToWthdrawMoney.ID {
 		return errors.NewUnauthorizedError("you are not authorized to withdraw amount from wallet")
 	}
+
+    if userToWthdrawMoney.Wallet >=dbUser.Wallet {
+		return errors.NewValidationError("Withdraw amount greater current balnance")
+	} 
 
 	var amount = userToWthdrawMoney.Wallet
 
@@ -583,6 +589,8 @@ func (s *UserService) GetMonthlyStats(table string, column string, year int, ext
 	err := s.db.Raw(query, year).Scan(&stats).Error
 	return stats, err
 }
+
+
 
 func (s *UserService) GetMonthlyRevenue(year int) ([]stats.MonthlyStat, error) {
 	var stats []stats.MonthlyStat

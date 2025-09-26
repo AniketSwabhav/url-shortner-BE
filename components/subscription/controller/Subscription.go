@@ -31,7 +31,7 @@ func (SubscriptionController *SubscriptionController) RegisterRoutes(router *mux
 	guardedRouter := subscriptionRouter.PathPrefix("/").Subrouter()
 	commonRouter := subscriptionRouter.PathPrefix("/").Subrouter()
 
-	commonRouter.HandleFunc("/subscription", SubscriptionController.getSubscriptionPrice).Methods(http.MethodGet)
+	guardedRouter.HandleFunc("/subscription", SubscriptionController.getSubscriptionPrice).Methods(http.MethodGet)
 
 	guardedRouter.HandleFunc("/subscription", SubscriptionController.setSubscriptionPrice).Methods(http.MethodPost)
 	guardedRouter.HandleFunc("/subscription/update", SubscriptionController.updateSubscriptionPrice).Methods(http.MethodPut)
