@@ -27,7 +27,7 @@ func NewSubscriptionrController(userService *subscriptionService.SubscriptionSer
 
 func (SubscriptionController *SubscriptionController) RegisterRoutes(router *mux.Router) {
 
-	subscriptionRouter := router.PathPrefix("/url").Subrouter()
+	subscriptionRouter := router.PathPrefix("/urls").Subrouter()
 	guardedRouter := subscriptionRouter.PathPrefix("/").Subrouter()
 	commonRouter := subscriptionRouter.PathPrefix("/").Subrouter()
 

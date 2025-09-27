@@ -234,21 +234,20 @@ func (service *UserService) GetAllUsers(allUsers *[]user.UserDTO, parser *web.Pa
 // 	return repository.CombineQueries(queryProcessors)
 // }
 
-
 func (service *UserService) addSearchQueries(requestForm url.Values) repository.QueryProcessor {
-    searchTerm := requestForm.Get("search")
-    if searchTerm == "" {
-        return repository.QueryProcessor(func(db *gorm.DB, out interface{}) (*gorm.DB, error) {
-            return db.Find(out), nil
-        })
-    }
+	searchTerm := requestForm.Get("search")
+	if searchTerm == "" {
+		return repository.QueryProcessor(func(db *gorm.DB, out interface{}) (*gorm.DB, error) {
+			return db.Find(out), nil
+		})
+	}
 
-    return repository.QueryProcessor(func(db *gorm.DB, out interface{}) (*gorm.DB, error) {
-        return db.Joins("JOIN credentials ON credentials.user_id = users.id").
-            Where("users.first_name LIKE ? OR users.last_name LIKE ? OR credentials.email LIKE ?",
-                "%"+searchTerm+"%", "%"+searchTerm+"%", "%"+searchTerm+"%").
-            Find(out), nil
-    })
+	return repository.QueryProcessor(func(db *gorm.DB, out interface{}) (*gorm.DB, error) {
+		return db.Joins("JOIN credentials ON credentials.user_id = users.id").
+			Where("users.first_name LIKE ? OR users.last_name LIKE ? OR credentials.email LIKE ?",
+				"%"+searchTerm+"%", "%"+searchTerm+"%", "%"+searchTerm+"%").
+			Find(out), nil
+	})
 }
 
 func (service *UserService) UpdateUser(targetUser *user.User) error {
@@ -356,8 +355,6 @@ func (service *UserService) WithdrawMoneyFromWallet(userID uuid.UUID, userToWthd
 		return err
 	}
 
-
-
 	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
 
@@ -370,9 +367,9 @@ func (service *UserService) WithdrawMoneyFromWallet(userID uuid.UUID, userToWthd
 		return errors.NewUnauthorizedError("you are not authorized to withdraw amount from wallet")
 	}
 
-    if userToWthdrawMoney.Wallet >=dbUser.Wallet {
-		return errors.NewValidationError("Withdraw amount greater current balnance")
-	} 
+	if userToWthdrawMoney.Wallet >= dbUser.Wallet {
+		return errors.NewValidationError("insufficient balance to withdraw")
+	}
 
 	var amount = userToWthdrawMoney.Wallet
 
@@ -589,8 +586,6 @@ func (s *UserService) GetMonthlyStats(table string, column string, year int, ext
 	err := s.db.Raw(query, year).Scan(&stats).Error
 	return stats, err
 }
-
-
 
 func (s *UserService) GetMonthlyRevenue(year int) ([]stats.MonthlyStat, error) {
 	var stats []stats.MonthlyStat
