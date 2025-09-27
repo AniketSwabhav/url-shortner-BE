@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"url-shortner-be/components/errors"
@@ -449,18 +448,27 @@ func (controller *UserController) renewUrlsByUserId(w http.ResponseWriter, r *ht
 }
 
 func (controller *UserController) getMonthWiseRecords(w http.ResponseWriter, r *http.Request) {
-query := r.URL.Query()
+	query := r.URL.Query()
 	value := query.Get("value")
 	yearStr := query.Get("year")
+	monthStr := query.Get("month")
 
+	// Validate year
 	year, err := strconv.Atoi(yearStr)
 	if err != nil {
-		http.Error(w, "invalid year", http.StatusBadRequest)
+		http.Error(w, "Invalid year", http.StatusBadRequest)
 		return
 	}
 
-	var stats = []stats.MonthlyStat{}
+	// Validate month
+	monthInt, err := strconv.Atoi(monthStr)
+	if err != nil || monthInt < 1 || monthInt > 12 {
+		http.Error(w, "Invalid month", http.StatusBadRequest)
+		return
+	}
 
+	// Call appropriate service
+	var stats []stats.MonthlyStat
 	switch value {
 	case "new-users":
 		stats, err = controller.UserService.GetMonthlyStats("users", "created_at", year, "")
@@ -473,41 +481,36 @@ query := r.URL.Query()
 	case "total-revenue":
 		stats, err = controller.UserService.GetMonthlyRevenue(year)
 	default:
-		http.Error(w, "invalid value type", http.StatusBadRequest)
+		http.Error(w, "Invalid value type", http.StatusBadRequest)
 		return
 	}
 
 	if err != nil {
-		web.RespondErrorMessage(w, http.StatusInternalServerError, "error in fetching stats")
+		web.RespondErrorMessage(w, http.StatusInternalServerError, "Error fetching stats")
 		return
 	}
 
+	// Month name mapping
 	months := [...]string{
 		"January", "February", "March", "April", "May", "June",
 		"July", "August", "September", "October", "November", "December",
 	}
 
-	dataMonthly := make(map[string]interface{})
-	dataCount := make(map[string]interface{})
-
-	for _, month := range months {
-		dataMonthly[month] = 0
-		dataCount[month] = 0
-	}
+	monthName := months[monthInt-1]
+	var valueForMonth float64 = 0.0
 
 	for _, stat := range stats {
-		monthName := months[stat.Month-1]
-		dataMonthly[monthName] = stat.Value
-		dataCount[monthName] = stat.Value
+		if stat.Month == monthInt {
+			valueForMonth = stat.Value
+			break
+		}
 	}
 
-	jsonCounts, err := json.Marshal(dataCount)
-	if err != nil {
-		web.RespondErrorMessage(w, http.StatusInternalServerError, "Unable to marshal counts header")
-		return
+	// Final response
+	response := map[string]interface{}{
+		"month": monthName,
+		"value": valueForMonth,
 	}
 
-	web.SetNewHeader(w, "X-Monthly-Counts", string(jsonCounts))
-
-	web.RespondJSON(w, http.StatusOK, dataMonthly)
+	web.RespondJSON(w, http.StatusOK, response)
 }

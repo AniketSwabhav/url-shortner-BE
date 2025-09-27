@@ -1,6 +1,6 @@
 package stats
 
 type MonthlyStat struct {
-	Month int         `json:"month"`
-	Value interface{} `json:"value"`
+	Month int     `json:"month"`
+	Value float64 `json:"value"`
 }
