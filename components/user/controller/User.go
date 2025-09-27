@@ -48,10 +48,11 @@ func (userController *UserController) RegisterRoutes(router *mux.Router) {
 	userguardedRouter.HandleFunc("/{userId}/wallet/withdraw", userController.withdrawAmountFromWallet).Methods(http.MethodPost)
 	userguardedRouter.HandleFunc("/{userId}/renew-urls", userController.renewUrlsByUserId).Methods(http.MethodPost)
 	userguardedRouter.HandleFunc("/{userId}/amount", userController.getwalletAmount).Methods(http.MethodGet)
-	userguardedRouter.HandleFunc("/{userId}", userController.updateUserById).Methods(http.MethodPut)
 
 	commonRouter.HandleFunc("/{userId}", userController.getUserByID).Methods(http.MethodGet)
 	commonRouter.HandleFunc("/{userId}/transactions", userController.getTransactionByUserId).Methods(http.MethodGet)
+	commonRouter.HandleFunc("/{userId}", userController.updateUserById).Methods(http.MethodPut)
+
 
 	adminguardedRouter.HandleFunc("/", userController.getAllUsers).Methods(http.MethodGet)
 	adminguardedRouter.HandleFunc("/monthwise-records", userController.getMonthWiseRecords).Methods(http.MethodGet)
