@@ -27,11 +27,11 @@ func NewSubscriptionrController(userService *subscriptionService.SubscriptionSer
 
 func (SubscriptionController *SubscriptionController) RegisterRoutes(router *mux.Router) {
 
-	subscriptionRouter := router.PathPrefix("/url").Subrouter()
+	subscriptionRouter := router.PathPrefix("/urls").Subrouter()
 	guardedRouter := subscriptionRouter.PathPrefix("/").Subrouter()
 	commonRouter := subscriptionRouter.PathPrefix("/").Subrouter()
 
-	guardedRouter.HandleFunc("/subscription", SubscriptionController.getSubscriptionPrice).Methods(http.MethodGet)
+	commonRouter.HandleFunc("/subscription", SubscriptionController.getSubscriptionPrice).Methods(http.MethodGet)
 
 	guardedRouter.HandleFunc("/subscription", SubscriptionController.setSubscriptionPrice).Methods(http.MethodPost)
 	guardedRouter.HandleFunc("/subscription/update", SubscriptionController.updateSubscriptionPrice).Methods(http.MethodPut)
