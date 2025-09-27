@@ -334,13 +334,13 @@ func (service *UserService) AddAmountToWalllet(userID uuid.UUID, userToAddMoney 
 	}
 
 	//transaction--------------------------------------------------------------------------------------------------
-	var transactionType = "CREDIT"
-	var note = fmt.Sprintf("%0.2f added in the wallet", amount)
+	// var transactionType = "CREDIT"
+	// var note = fmt.Sprintf("%0.2f added in the wallet", amount)
 
-	if err := service.transactionservice.CreateTransaction(uow, userToAddMoney.ID, amount, transactionType, note); err != nil {
-		uow.RollBack()
-		return errors.NewDatabaseError("unable to create transaction")
-	}
+	// if err := service.transactionservice.CreateTransaction(uow, userToAddMoney.ID, amount, transactionType, note); err != nil {
+	// 	uow.RollBack()
+	// 	return errors.NewDatabaseError("unable to create transaction")
+	// }
 
 	uow.Commit()
 	return nil
@@ -386,13 +386,13 @@ func (service *UserService) WithdrawMoneyFromWallet(userID uuid.UUID, userToWthd
 	}
 
 	//transaction--------------------------------------------------------------------------------------------------
-	var transactionType = "DEBIT"
-	var note = fmt.Sprintf("%0.2f removed from the wallet", amount)
+	// var transactionType = "DEBIT"
+	// var note = fmt.Sprintf("%0.2f removed from the wallet", amount)
 
-	if err := service.transactionservice.CreateTransaction(uow, userToWthdrawMoney.ID, amount, transactionType, note); err != nil {
-		uow.RollBack()
-		return errors.NewDatabaseError("unable to create transaction")
-	}
+	// if err := service.transactionservice.CreateTransaction(uow, userToWthdrawMoney.ID, amount, transactionType, note); err != nil {
+	// 	uow.RollBack()
+	// 	return errors.NewDatabaseError("unable to create transaction")
+	// }
 
 	uow.Commit()
 	return nil
