@@ -53,7 +53,6 @@ func (userController *UserController) RegisterRoutes(router *mux.Router) {
 	commonRouter.HandleFunc("/{userId}/transactions", userController.getTransactionByUserId).Methods(http.MethodGet)
 	commonRouter.HandleFunc("/{userId}", userController.updateUserById).Methods(http.MethodPut)
 
-
 	adminguardedRouter.HandleFunc("/", userController.getAllUsers).Methods(http.MethodGet)
 	adminguardedRouter.HandleFunc("/monthwise-records", userController.getMonthWiseRecords).Methods(http.MethodGet)
 	adminguardedRouter.HandleFunc("/{userId}", userController.deleteUserById).Methods(http.MethodDelete)
@@ -198,10 +197,10 @@ func (controller *UserController) updateUserById(w http.ResponseWriter, r *http.
 	}
 	targetUser.UpdatedBy = userIdFromToken
 
-	if userIdFromURL != userIdFromToken {
-		web.RespondError(w, errors.NewUnauthorizedError("you are not authorized to update the user"))
-		return
-	}
+	// if userIdFromURL != userIdFromToken {
+	// 	web.RespondError(w, errors.NewUnauthorizedError("you are not authorized to update the user"))
+	// 	return
+	// }
 
 	if err = controller.UserService.UpdateUser(targetUser); err != nil {
 		web.RespondError(w, err)
