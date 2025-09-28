@@ -53,7 +53,6 @@ func (userController *UserController) RegisterRoutes(router *mux.Router) {
 	commonRouter.HandleFunc("/{userId}/transactions", userController.getTransactionByUserId).Methods(http.MethodGet)
 	commonRouter.HandleFunc("/{userId}", userController.updateUserById).Methods(http.MethodPut)
 
-
 	adminguardedRouter.HandleFunc("/", userController.getAllUsers).Methods(http.MethodGet)
 	adminguardedRouter.HandleFunc("/monthwise-records", userController.getMonthWiseRecords).Methods(http.MethodGet)
 	adminguardedRouter.HandleFunc("/{userId}", userController.deleteUserById).Methods(http.MethodDelete)
