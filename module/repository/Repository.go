@@ -61,8 +61,6 @@ func (uow *UnitOfWork) Commit() {
 	}
 }
 
-
-
 func executeQueryProcessors(db *gorm.DB, out interface{}, queryProcessors ...QueryProcessor) (*gorm.DB, error) {
 	var err error
 	for _, query := range queryProcessors {
@@ -188,13 +186,50 @@ func DoesEmailExist(db *gorm.DB, email string, out interface{}, queryProcessors 
 		return false, errors.NewNotFoundError("email not present")
 	}
 	count := 0
-	// Below comment would make the tenant check before all query processor (Uncomment only if needed in future)
-	// queryProcessors = append([]QueryProcessor{Filter("tenant_id = ?", tenantID)},queryProcessors... )
+
 	db, err := executeQueryProcessors(db, out, queryProcessors...)
 	if err != nil {
 		return false, err
 	}
 	if err := db.Debug().Model(out).Where("email = ?", email).Count(&count).Error; err != nil {
+		return false, err
+	}
+	if count > 0 {
+		return true, nil
+	}
+	return false, nil
+}
+
+func DoesLongUrlExist(db *gorm.DB, longUrl string, out interface{}, queryProcessors ...QueryProcessor) (bool, error) {
+	if longUrl == "" {
+		return false, errors.NewNotFoundError("URL not valid")
+	}
+	count := 0
+
+	db, err := executeQueryProcessors(db, out, queryProcessors...)
+	if err != nil {
+		return false, err
+	}
+	if err := db.Debug().Model(out).Where("long_url = ?", longUrl).Count(&count).Error; err != nil {
+		return false, err
+	}
+	if count > 0 {
+		return true, nil
+	}
+	return false, nil
+}
+
+func DoesShortUrlExist(db *gorm.DB, shortUrl string, out interface{}, queryProcessors ...QueryProcessor) (bool, error) {
+	if shortUrl == "" {
+		return false, errors.NewNotFoundError("Short is URL not valid")
+	}
+	count := 0
+
+	db, err := executeQueryProcessors(db, out, queryProcessors...)
+	if err != nil {
+		return false, err
+	}
+	if err := db.Debug().Model(out).Where("short_url = ?", shortUrl).Count(&count).Error; err != nil {
 		return false, err
 	}
 	if count > 0 {

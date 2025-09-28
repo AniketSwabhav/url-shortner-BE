@@ -37,7 +37,7 @@ func (url *Url) Validate(inputUrl string) error {
 		return err
 	}
 	if resp.StatusCode == 404 {
-		return errors.NewValidationError("request url not found")
+		return errors.NewValidationError("request url not found, please provide a valid Long URL")
 	}
 	defer resp.Body.Close()
 

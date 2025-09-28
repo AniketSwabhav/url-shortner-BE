@@ -34,6 +34,14 @@ func NewUrlService(DB *gorm.DB, repo repository.Repository) *UrlService {
 
 func (service *UrlService) CreateUrl(userId uuid.UUID, urlOwner *user.User, newUrl *url.Url) error {
 
+	if err := service.doesLongUrlExists(newUrl.LongUrl); err != nil {
+		return err
+	}
+
+	if err := service.doesShortUrlExists(newUrl.ShortUrl); err != nil {
+		return err
+	}
+
 	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
 
@@ -61,18 +69,18 @@ func (service *UrlService) CreateUrl(userId uuid.UUID, urlOwner *user.User, newU
 	newUrl.UserID = foundUser.ID
 	newUrl.Visits = subscription.FreeVisits
 
-	for {
+	// for {
 
-		newUrl.ShortUrl = url.GenerateShortUrl()
+	// 	newUrl.ShortUrl = url.GenerateShortUrl()
 
-		foundUrl := &url.Url{}
-		service.repository.GetRecord(uow, foundUrl, repository.Filter("short_url = ?", newUrl.ShortUrl))
-		if foundUrl.ShortUrl == newUrl.ShortUrl {
-			continue
-		} else {
-			break
-		}
-	}
+	// 	foundUrl := &url.Url{}
+	// 	service.repository.GetRecord(uow, foundUrl, repository.Filter("short_url = ?", newUrl.ShortUrl))
+	// 	if foundUrl.ShortUrl == newUrl.ShortUrl {
+	// 		continue
+	// 	} else {
+	// 		break
+	// 	}
+	// }
 
 	if err := service.repository.Add(uow, &newUrl); err != nil {
 		uow.RollBack()
@@ -327,10 +335,30 @@ func (service *UrlService) Delete(urlID uuid.UUID, deletedBy uuid.UUID) error {
 	return nil
 }
 
+//--------------------------------------------------------------------------------------------
+
 func (service *UrlService) doesUrlExist(urlID uuid.UUID) error {
 	var u url.Url
 	if err := service.db.First(&u, "id = ?", urlID).Error; err != nil {
 		return errors.NewValidationError("URL ID is invalid")
+	}
+	return nil
+}
+
+func (service *UrlService) doesLongUrlExists(longUrl string) error {
+	exists, _ := repository.DoesLongUrlExist(service.db, longUrl, url.Url{},
+		repository.Filter("long_url = ?", longUrl))
+	if exists {
+		return errors.NewValidationError("URL is already registered")
+	}
+	return nil
+}
+
+func (service *UrlService) doesShortUrlExists(shortUrl string) error {
+	exists, _ := repository.DoesShortUrlExist(service.db, shortUrl, url.Url{},
+		repository.Filter("short_url = ?", shortUrl))
+	if exists {
+		return errors.NewValidationError("This Short URL is already registered, try another pattern")
 	}
 	return nil
 }
