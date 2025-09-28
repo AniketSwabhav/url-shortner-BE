@@ -253,7 +253,30 @@ func (service *UrlService) GetAllUrls(allUrl *[]url.UrlDTO, totalCount *int, par
 	return nil
 }
 
+
+// func (service *UserService) addSearchQueries(requestForm url.Values) repository.QueryProcessor {
+// 	searchTerm := requestForm.Get("search")
+// 	if searchTerm == "" {
+// 		return repository.QueryProcessor(func(db *gorm.DB, out interface{}) (*gorm.DB, error) {
+// 			return db.Find(out), nil
+// 		})
+// 	}
+
+// 	return repository.QueryProcessor(func(db *gorm.DB, out interface{}) (*gorm.DB, error) {
+// 		return db.Joins("JOIN credentials ON credentials.user_id = users.id").
+// 			Where("users.first_name LIKE ? OR users.last_name LIKE ? OR credentials.email LIKE ?",
+// 				"%"+searchTerm+"%", "%"+searchTerm+"%", "%"+searchTerm+"%").
+// 			Find(out), nil
+// 	})
+// }
+
 func (service *UrlService) addSearchQueries(requestForm urlNet.Values) repository.QueryProcessor {
+	searchTerm := requestForm.Get("search")
+	if searchTerm == "" {
+		return repository.QueryProcessor(func(db *gorm.DB, out interface{}) (*gorm.DB, error) {
+			return db.Find(out), nil
+		})
+	}
 
 	var queryProcessors []repository.QueryProcessor
 
@@ -261,10 +284,14 @@ func (service *UrlService) addSearchQueries(requestForm urlNet.Values) repositor
 		return nil
 	}
 
-	queryProcessors = append(queryProcessors, repository.Filter("short_url LIKE (?)", "%"+requestForm.Get("shortUrl")+"%"))
+	queryProcessors = append(queryProcessors,
+		repository.Filter("(long_url LIKE ? OR short_url LIKE ?)", "%"+searchTerm+"%", "%"+searchTerm+"%"),
+	)
 
 	return repository.CombineQueries(queryProcessors)
 }
+
+
 
 func (service *UrlService) GetUrlByID(targetURL *url.UrlDTO) error {
 
