@@ -594,10 +594,10 @@ func (s *UserService) GetMonthlyRevenue(year int) ([]stats.MonthlyStat, error) {
 		SELECT MONTH(created_at) as month, SUM(amount) as value
 		FROM transactions
 		WHERE YEAR(created_at) = ?
+		 AND type In('URLRENEWAL','VISITSRENEWAL')
 		GROUP BY MONTH(created_at)
 		ORDER BY MONTH(created_at)
 	`
-
 	err := s.db.Raw(query, year).Scan(&stats).Error
 	return stats, err
 }

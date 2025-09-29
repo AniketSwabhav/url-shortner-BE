@@ -461,6 +461,7 @@ func (controller *UserController) getMonthWiseRecords(w http.ResponseWriter, r *
 	}
 
 	// Validate month
+	// strconv.Atoi ->string to int convert
 	monthInt, err := strconv.Atoi(monthStr)
 	if err != nil || monthInt < 1 || monthInt > 12 {
 		http.Error(w, "Invalid month", http.StatusBadRequest)
@@ -477,7 +478,7 @@ func (controller *UserController) getMonthWiseRecords(w http.ResponseWriter, r *
 	case "urls-generated":
 		stats, err = controller.UserService.GetMonthlyStats("urls", "created_at", year, "")
 	case "urls-renewed":
-		stats, err = controller.UserService.GetMonthlyStats("transactions", "created_at", year, "")
+		stats, err = controller.UserService.GetMonthlyStats("transactions", "created_at", year, "AND amount > 0")
 	case "total-revenue":
 		stats, err = controller.UserService.GetMonthlyRevenue(year)
 	default:
