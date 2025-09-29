@@ -200,7 +200,7 @@ func DoesEmailExist(db *gorm.DB, email string, out interface{}, queryProcessors 
 	return false, nil
 }
 
-func DoesLongUrlExist(db *gorm.DB, longUrl string, out interface{}, queryProcessors ...QueryProcessor) (bool, error) {
+func DoesLongUrlExist(db *gorm.DB, longUrl string, userIid uuid.UUID, out interface{}, queryProcessors ...QueryProcessor) (bool, error) {
 	if longUrl == "" {
 		return false, errors.NewNotFoundError("URL not valid")
 	}
@@ -210,7 +210,7 @@ func DoesLongUrlExist(db *gorm.DB, longUrl string, out interface{}, queryProcess
 	if err != nil {
 		return false, err
 	}
-	if err := db.Debug().Model(out).Where("long_url = ?", longUrl).Count(&count).Error; err != nil {
+	if err := db.Debug().Model(out).Where("long_url = ? AND user_id = ?", longUrl, userIid).Count(&count).Error; err != nil {
 		return false, err
 	}
 	if count > 0 {
@@ -219,7 +219,7 @@ func DoesLongUrlExist(db *gorm.DB, longUrl string, out interface{}, queryProcess
 	return false, nil
 }
 
-func DoesShortUrlExist(db *gorm.DB, shortUrl string, out interface{}, queryProcessors ...QueryProcessor) (bool, error) {
+func DoesShortUrlExist(db *gorm.DB, shortUrl string, userId uuid.UUID, out interface{}, queryProcessors ...QueryProcessor) (bool, error) {
 	if shortUrl == "" {
 		return false, errors.NewNotFoundError("Short is URL not valid")
 	}
@@ -229,7 +229,7 @@ func DoesShortUrlExist(db *gorm.DB, shortUrl string, out interface{}, queryProce
 	if err != nil {
 		return false, err
 	}
-	if err := db.Debug().Model(out).Where("short_url = ?", shortUrl).Count(&count).Error; err != nil {
+	if err := db.Debug().Model(out).Where("short_url = ? AND user_id = ?", shortUrl, userId).Count(&count).Error; err != nil {
 		return false, err
 	}
 	if count > 0 {

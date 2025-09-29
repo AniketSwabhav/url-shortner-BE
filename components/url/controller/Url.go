@@ -26,15 +26,16 @@ func NewUrlController(urlService *urlService.UrlService, log log.Logger) *UrlCon
 }
 
 // for short url redirection---------------------------------------------------
-func (urlcontroller *UrlController) RegisterRedirectRoute(router *mux.Router) {
-	redirectRouter := router.PathPrefix("/").Subrouter()
-	redirectRouter.HandleFunc("/{short-url}", urlcontroller.redirectUrl)
-}
+// func (urlcontroller *UrlController) RegisterRedirectRoute(router *mux.Router) {
+// 	redirectRouter := router.PathPrefix("/").Subrouter()
+// 	redirectRouter.HandleFunc("/{short-url}", urlcontroller.redirectUrl)
+// }
 
 func (urlController *UrlController) RegisterRoutes(router *mux.Router) {
 
 	urlRouter := router.PathPrefix("/url").Subrouter()
 	commonRouter := router.PathPrefix("/url").Subrouter()
+	redirectRouter := router.PathPrefix("/redirect").Subrouter()
 
 	urlRouter.HandleFunc("/register", urlController.registerUrl).Methods(http.MethodPost)
 	urlRouter.HandleFunc("/short-url", urlController.getUrlByShortUrl).Methods(http.MethodPost)
@@ -44,6 +45,8 @@ func (urlController *UrlController) RegisterRoutes(router *mux.Router) {
 	urlRouter.HandleFunc("/{urlId}/renew-visits", urlController.renewUrlVisits).Methods(http.MethodPost)
 
 	commonRouter.HandleFunc("/user/{userId}", urlController.getAllUrlsByUserId).Methods(http.MethodGet)
+
+	redirectRouter.HandleFunc("/{short-url}", urlController.redirectUrl).Methods(http.MethodGet)
 
 	commonRouter.Use(security.MiddlewareCommon)
 	urlRouter.Use(security.MiddlewareUser)
@@ -61,7 +64,7 @@ func (controller *UrlController) registerUrl(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	err = newUrl.Validate(newUrl.LongUrl)
+	err = newUrl.Validate(newUrl.LongUrl, newUrl.ShortUrl)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -111,7 +114,9 @@ func (controller *UrlController) redirectUrl(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	http.Redirect(w, r, urlToRedirect.LongUrl, http.StatusSeeOther)
+	// http.Redirect(w, r, urlToRedirect.LongUrl, http.StatusSeeOther)
+
+	web.RespondJSON(w, http.StatusOK, urlToRedirect)
 }
 
 // ---------------------------------------------------------------------------
@@ -230,7 +235,7 @@ func (controller *UrlController) updateUrlById(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if err := targetUrl.Validate(targetUrl.LongUrl); err != nil {
+	if err := targetUrl.Validate(targetUrl.LongUrl, targetUrl.ShortUrl); err != nil {
 		controller.log.Error(err.Error())
 		web.RespondError(w, err)
 		return

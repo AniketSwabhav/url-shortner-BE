@@ -30,7 +30,7 @@ func (*UrlDTO) TableName() string {
 	return "urls"
 }
 
-func (url *Url) Validate(inputUrl string) error {
+func (url *Url) Validate(inputUrl string, shortUrl string) error {
 	resp, err := http.Get(inputUrl)
 	if err != nil {
 		log.GetLogger().Print(err)
@@ -40,6 +40,10 @@ func (url *Url) Validate(inputUrl string) error {
 		return errors.NewValidationError("request url not found, please provide a valid Long URL")
 	}
 	defer resp.Body.Close()
+
+	if len(shortUrl) == 0 || len(shortUrl) != 5 {
+		return errors.NewHTTPError("short url must have 5 characters", http.StatusBadRequest)
+	}
 
 	return nil
 }

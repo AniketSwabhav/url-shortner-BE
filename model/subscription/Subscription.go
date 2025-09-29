@@ -11,6 +11,8 @@ type Subscription struct {
 	FreeVisits      int     `json:"freeVisits" gorm:"type:int"`
 	NewUrlPrice     float32 `json:"newUrlPrice" gorm:"type:float"`
 	ExtraVisitPrice float32 `json:"extraVisitPrice" gorm:"type:float"`
+
+	ExtraVisitPriceNew float32 `json:"extraVisitPriceNew" gorm:"-"`
 }
 
 func (s *Subscription) Validate() error {

@@ -16,6 +16,6 @@ func ValidateContact(contact string) bool {
 
 // ValidateEmail validates email which should be of the type example@domain.com
 func ValidateEmail(email string) bool {
-	emailPattern := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-z]{2,4}`)
+	emailPattern := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-z]{2,}`)
 	return emailPattern.MatchString(email)
 }

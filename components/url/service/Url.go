@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"net/http"
 	urlNet "net/url"
 	"time"
 	"url-shortner-be/components/errors"
@@ -34,11 +35,11 @@ func NewUrlService(DB *gorm.DB, repo repository.Repository) *UrlService {
 
 func (service *UrlService) CreateUrl(userId uuid.UUID, urlOwner *user.User, newUrl *url.Url) error {
 
-	if err := service.doesLongUrlExists(newUrl.LongUrl); err != nil {
+	if err := service.doesLongUrlExistsForCurrentUser(newUrl.LongUrl, userId); err != nil {
 		return err
 	}
 
-	if err := service.doesShortUrlExists(newUrl.ShortUrl); err != nil {
+	if err := service.doesShortUrlExistsForCurrentUser(newUrl.ShortUrl, userId); err != nil {
 		return err
 	}
 
@@ -136,7 +137,7 @@ func (service *UrlService) RedirectToUrl(urlToRedirect *url.Url) error {
 
 	if urlToRedirect.Visits == 0 {
 		uow.RollBack()
-		return errors.NewInValidPasswordError("no. of visits reacheed it's limit, please renew the visits")
+		return errors.NewHTTPError("no. of visits reacheed it's limit, please renew the visits", http.StatusForbidden)
 	}
 
 	urlToRedirect.Visits--
@@ -253,7 +254,6 @@ func (service *UrlService) GetAllUrls(allUrl *[]url.UrlDTO, totalCount *int, par
 	return nil
 }
 
-
 // func (service *UserService) addSearchQueries(requestForm url.Values) repository.QueryProcessor {
 // 	searchTerm := requestForm.Get("search")
 // 	if searchTerm == "" {
@@ -290,8 +290,6 @@ func (service *UrlService) addSearchQueries(requestForm urlNet.Values) repositor
 
 	return repository.CombineQueries(queryProcessors)
 }
-
-
 
 func (service *UrlService) GetUrlByID(targetURL *url.UrlDTO) error {
 
@@ -372,17 +370,17 @@ func (service *UrlService) doesUrlExist(urlID uuid.UUID) error {
 	return nil
 }
 
-func (service *UrlService) doesLongUrlExists(longUrl string) error {
-	exists, _ := repository.DoesLongUrlExist(service.db, longUrl, url.Url{},
+func (service *UrlService) doesLongUrlExistsForCurrentUser(longUrl string, userId uuid.UUID) error {
+	exists, _ := repository.DoesLongUrlExist(service.db, longUrl, userId, url.Url{},
 		repository.Filter("long_url = ?", longUrl))
 	if exists {
-		return errors.NewValidationError("URL is already registered")
+		return errors.NewValidationError("Requested URL is already registered")
 	}
 	return nil
 }
 
-func (service *UrlService) doesShortUrlExists(shortUrl string) error {
-	exists, _ := repository.DoesShortUrlExist(service.db, shortUrl, url.Url{},
+func (service *UrlService) doesShortUrlExistsForCurrentUser(shortUrl string, userId uuid.UUID) error {
+	exists, _ := repository.DoesShortUrlExist(service.db, shortUrl, userId, url.Url{},
 		repository.Filter("short_url = ?", shortUrl))
 	if exists {
 		return errors.NewValidationError("This Short URL is already registered, try another pattern")

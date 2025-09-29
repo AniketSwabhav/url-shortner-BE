@@ -8,8 +8,6 @@ import (
 	"time"
 	"url-shortner-be/components/config"
 	"url-shortner-be/components/log"
-	"url-shortner-be/components/url/controller"
-	"url-shortner-be/components/url/service"
 	"url-shortner-be/module/repository"
 
 	_ "github.com/jinzhu/gorm/dialects/mysql"
@@ -21,15 +19,15 @@ import (
 
 type App struct {
 	sync.Mutex
-	Name                 string
-	Router               *mux.Router
-	myAppRouter          *mux.Router
-	urlRedirectionRouter *mux.Router
-	DB                   *gorm.DB
-	Log                  log.Logger
-	Server               *http.Server
-	WG                   *sync.WaitGroup
-	Repository           repository.Repository
+	Name        string
+	Router      *mux.Router
+	myAppRouter *mux.Router
+	// urlRedirectionRouter *mux.Router
+	DB         *gorm.DB
+	Log        log.Logger
+	Server     *http.Server
+	WG         *sync.WaitGroup
+	Repository repository.Repository
 }
 
 type Controller interface {
@@ -103,7 +101,7 @@ func (a *App) initializeRouter() {
 	a.Log.Print("Initializing " + a.Name + " Route")
 	a.Router = mux.NewRouter().StrictSlash(true)
 	a.myAppRouter = a.Router.PathPrefix("/api/v1/url-shortner").Subrouter()
-	a.urlRedirectionRouter = a.Router.PathPrefix("/").Subrouter()
+	// a.urlRedirectionRouter = a.Router.PathPrefix("/").Subrouter()
 }
 
 func (a *App) initializeServer() {
@@ -147,8 +145,8 @@ func (a *App) RegisterControllerRoutes(controllers []Controller) {
 	a.Lock()
 	defer a.Unlock()
 
-	controller := controller.NewUrlController(service.NewUrlService(a.DB, a.Repository), a.Log)
-	controller.RegisterRedirectRoute(a.urlRedirectionRouter)
+	// controller := controller.NewUrlController(service.NewUrlService(a.DB, a.Repository), a.Log)
+	// controller.RegisterRedirectRoute(a.urlRedirectionRouter)
 
 	for _, controller := range controllers {
 		controller.RegisterRoutes(a.myAppRouter)
