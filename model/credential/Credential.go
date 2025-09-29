@@ -10,7 +10,7 @@ import (
 
 type Credential struct {
 	model.Base
-	Email    string    `json:"email" gorm:"unique;not null;type:varchar(36)"`
+	Email    string    `json:"email" gorm:"not null;type:varchar(36)"`
 	Password string    `json:"password" gorm:"not null;type:varchar(255)"`
 	UserID   uuid.UUID `json:"userId" gorm:"not null;type:varchar(36)"`
 }
@@ -18,7 +18,7 @@ type Credential struct {
 type CredentialDTO struct {
 	model.Base
 	Email    string    `json:"email" gorm:"unique;not null;type:varchar(36)"`
-	Password string    `json:"password" gorm:"not null;type:varchar(255)"`
+	Password string    `json:"-" gorm:"not null;type:varchar(255)"`
 	UserID   uuid.UUID `json:"userId" gorm:"not null;type:varchar(36)"`
 }
 
@@ -31,6 +31,7 @@ func (user *Credential) Validate() error {
 	if util.IsEmpty(user.Email) || !util.ValidateEmail(user.Email) {
 		return errors.NewValidationError("User Email must be specified and should be of the type abc@domain.com")
 	}
+
 	if util.IsEmpty(user.Password) || len(user.Password) < 8 {
 		return errors.NewValidationError("Password should consist of 8 or more characters")
 	}

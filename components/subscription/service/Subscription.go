@@ -48,7 +48,7 @@ func (service *SubscriptionService) SetSubscriptionPrice(subscriptionPrices *sub
 
 func (service *SubscriptionService) GetPrice(latest *subscription.Subscription) error {
 
-	uow := repository.NewUnitOfWork(service.db, false)
+	uow := repository.NewUnitOfWork(service.db, true)
 	defer uow.RollBack()
 
 	err := service.repository.GetAll(uow, &latest)
@@ -56,7 +56,7 @@ func (service *SubscriptionService) GetPrice(latest *subscription.Subscription) 
 		return errors.NewDatabaseError("unable to fetch subscription details")
 	}
 
-	uow.Commit()
+	// uow.Commit()
 	return nil
 }
 

@@ -147,13 +147,13 @@ func (service *UrlService) RedirectToUrl(urlToRedirect *url.Url) error {
 		return errors.NewDatabaseError("unable to update visits count")
 	}
 
-	uow.Commit()
+	// uow.Commit()
 	return nil
 }
 
 func (service *UrlService) RenewUrlVisits(urlToRenew *url.Url) error {
 
-	uow := repository.NewUnitOfWork(service.db, true)
+	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
 
 	if urlToRenew.Visits <= 0 {
@@ -250,7 +250,7 @@ func (service *UrlService) GetAllUrls(allUrl *[]url.UrlDTO, totalCount *int, par
 		return errors.NewDatabaseError("error in fetching urls of user")
 	}
 
-	uow.Commit()
+	// uow.Commit()
 	return nil
 }
 
