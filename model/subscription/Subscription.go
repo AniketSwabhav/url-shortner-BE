@@ -9,8 +9,8 @@ type Subscription struct {
 	model.Base
 	FreeShortUrls   int     `json:"freeShortUrls" gorm:"type:int"`
 	FreeVisits      int     `json:"freeVisits" gorm:"type:int"`
-	NewUrlPrice     float32 `json:"newUrlPrice" gorm:"type:float"`
-	ExtraVisitPrice float32 `json:"extraVisitPrice" gorm:"type:float"`
+	NewUrlPrice     float32 `json:"newUrlPrice" gorm:"type:decimal(4,2)"`
+	ExtraVisitPrice float32 `json:"extraVisitPrice" gorm:"type:decimal(4,2)"`
 
 	ExtraVisitPriceNew float32 `json:"extraVisitPriceNew" gorm:"-"`
 }

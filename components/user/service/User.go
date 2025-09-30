@@ -107,13 +107,13 @@ func (service *UserService) CreateUser(newUser *user.User) error {
 	}
 
 	//transaction--------------------------------------------------------------------------------------------------
-	var transactionType = "ACCOUNTCREATION"
-	var note = fmt.Sprintf("First %d Free Url's limit is added to account, with %d Free visits per URL", subscription.FreeShortUrls, subscription.FreeVisits)
+	// var transactionType = "ACCOUNTCREATION"
+	// var note = fmt.Sprintf("First %d Free Url's limit is added to account, with %d Free visits per URL", subscription.FreeShortUrls, subscription.FreeVisits)
 
-	if err := service.transactionservice.CreateTransaction(uow, newUser.ID, 0.0, transactionType, note); err != nil {
-		uow.RollBack()
-		return errors.NewDatabaseError("unable to create transaction")
-	}
+	// if err := service.transactionservice.CreateTransaction(uow, newUser.ID, 0.0, transactionType, note); err != nil {
+	// 	uow.RollBack()
+	// 	return errors.NewDatabaseError("unable to create transaction")
+	// }
 
 	uow.Commit()
 	return nil
@@ -188,7 +188,7 @@ func (service *UserService) GetUserByID(targetUser *user.UserDTO, tokenUserId uu
 		return errors.NewDatabaseError("error getting user data")
 	}
 
-	uow.Commit()
+	// uow.Commit()
 	return nil
 }
 
@@ -199,7 +199,8 @@ func (service *UserService) GetAllUsers(allUsers *[]user.UserDTO, parser *web.Pa
 	uow := repository.NewUnitOfWork(service.db, true)
 	defer uow.RollBack()
 
-	queryProcessors = append(queryProcessors, repository.PreloadAssociations([]string{"Credentials", "Url", "Transactions"}),
+	// repository.PreloadAssociations([]string{"Credentials", "Url", "Transactions"}),
+	queryProcessors = append(queryProcessors, repository.PreloadAssociations([]string{"Credentials"}),
 		service.addSearchQueries(parser.Form),
 		repository.Paginate(limit, offset, totalCount))
 
@@ -208,7 +209,7 @@ func (service *UserService) GetAllUsers(allUsers *[]user.UserDTO, parser *web.Pa
 		return errors.NewDatabaseError("error getting all users")
 	}
 
-	uow.Commit()
+	// uow.Commit()
 	return nil
 }
 
@@ -322,6 +323,10 @@ func (service *UserService) AddAmountToWalllet(userID uuid.UUID, userToAddMoney 
 	var amount = userToAddMoney.Wallet
 
 	dbUser.Wallet += amount
+
+	if dbUser.Wallet > 1000000000.00 {
+		return errors.NewHTTPError("wallet balance must not exceed 1000000000.00", http.StatusInternalServerError)
+	}
 
 	if err := service.repository.UpdateWithMap(uow, &dbUser,
 		map[string]interface{}{
@@ -476,7 +481,7 @@ func (service *UserService) GetAllTransactions(transactions *[]transaction.Trans
 		return errors.NewDatabaseError("unable to fetch transactions for this user")
 	}
 
-	uow.Commit()
+	// uow.Commit()
 	return nil
 }
 
@@ -493,7 +498,7 @@ func (service *UserService) GetWalletAmount(user *user.UserDTO) error {
 		return errors.NewDatabaseError("Unable to fetch wallet amount for this user")
 	}
 
-	uow.Commit()
+	// uow.Commit()
 	return nil
 }
 
@@ -509,7 +514,7 @@ func (service *UserService) GetSubscription(subscriptions *[]subscription.Subscr
 		return errors.NewDatabaseError("unable to fetch subscriptions for this user")
 	}
 
-	uow.Commit()
+	// uow.Commit()
 	return nil
 }
 
@@ -519,13 +524,13 @@ func (service *UserService) RenewUrls(userToUpdate *user.User) error {
 		return err
 	}
 
-	uow := repository.NewUnitOfWork(service.db, true)
+	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
 
 	if userToUpdate.UpdatedBy != userToUpdate.ID {
 		return errors.NewUnauthorizedError("you are not authorized to renew urls for this user")
 	}
-
+	// --1`
 	if userToUpdate.UrlCount <= 0 {
 		return errors.NewValidationError("number of url renews should be a positive integer")
 	}

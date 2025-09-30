@@ -39,7 +39,7 @@ func (service *UrlService) CreateUrl(userId uuid.UUID, urlOwner *user.User, newU
 		return err
 	}
 
-	if err := service.doesShortUrlExistsForCurrentUser(newUrl.ShortUrl, userId); err != nil {
+	if err := service.doesShortUrlExists(newUrl.ShortUrl); err != nil {
 		return err
 	}
 
@@ -147,13 +147,13 @@ func (service *UrlService) RedirectToUrl(urlToRedirect *url.Url) error {
 		return errors.NewDatabaseError("unable to update visits count")
 	}
 
-	uow.Commit()
+	// uow.Commit()
 	return nil
 }
 
 func (service *UrlService) RenewUrlVisits(urlToRenew *url.Url) error {
 
-	uow := repository.NewUnitOfWork(service.db, true)
+	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
 
 	if urlToRenew.Visits <= 0 {
@@ -250,7 +250,7 @@ func (service *UrlService) GetAllUrls(allUrl *[]url.UrlDTO, totalCount *int, par
 		return errors.NewDatabaseError("error in fetching urls of user")
 	}
 
-	uow.Commit()
+	// uow.Commit()
 	return nil
 }
 
@@ -379,8 +379,8 @@ func (service *UrlService) doesLongUrlExistsForCurrentUser(longUrl string, userI
 	return nil
 }
 
-func (service *UrlService) doesShortUrlExistsForCurrentUser(shortUrl string, userId uuid.UUID) error {
-	exists, _ := repository.DoesShortUrlExist(service.db, shortUrl, userId, url.Url{},
+func (service *UrlService) doesShortUrlExists(shortUrl string) error {
+	exists, _ := repository.DoesShortUrlExist(service.db, shortUrl, url.Url{},
 		repository.Filter("short_url = ?", shortUrl))
 	if exists {
 		return errors.NewValidationError("This Short URL is already registered, try another pattern")
