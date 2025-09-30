@@ -42,7 +42,7 @@ func (userController *UserController) RegisterRoutes(router *mux.Router) {
 
 	unguardedRouter.HandleFunc("/login", userController.login).Methods(http.MethodPost)
 	unguardedRouter.HandleFunc("/register-user", userController.registerUser).Methods(http.MethodPost)
-	adminguardedRouter.HandleFunc("/register-admin", userController.registerAdmin).Methods(http.MethodPost)
+	unguardedRouter.HandleFunc("/register-admin", userController.registerAdmin).Methods(http.MethodPost)
 
 	userguardedRouter.HandleFunc("/{userId}/wallet/add", userController.addAmountToWallet).Methods(http.MethodPost)
 	userguardedRouter.HandleFunc("/{userId}/wallet/withdraw", userController.withdrawAmountFromWallet).Methods(http.MethodPost)
@@ -268,6 +268,11 @@ func (controller *UserController) addAmountToWallet(w http.ResponseWriter, r *ht
 		return
 	}
 
+	if userToAddMoney.Wallet > 1000000.00 {
+		web.RespondErrorMessage(w, http.StatusInternalServerError, "add amount must not be greater than 1000000")
+		return
+	}
+
 	userIdFromToken, err := security.ExtractUserIDFromToken(r)
 	if err != nil {
 		controller.log.Error(err.Error())
@@ -300,6 +305,11 @@ func (controller *UserController) withdrawAmountFromWallet(w http.ResponseWriter
 	err = web.UnmarshalJSON(r, &userToWithdrawMoney)
 	if err != nil {
 		web.RespondError(w, errors.NewHTTPError("Unable to parse request body", http.StatusBadRequest))
+		return
+	}
+
+	if userToWithdrawMoney.Wallet > 1000000.00 {
+		web.RespondErrorMessage(w, http.StatusInternalServerError, "withdrawal amount must not be greater than 1000000")
 		return
 	}
 

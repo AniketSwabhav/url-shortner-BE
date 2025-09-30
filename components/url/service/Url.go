@@ -39,7 +39,7 @@ func (service *UrlService) CreateUrl(userId uuid.UUID, urlOwner *user.User, newU
 		return err
 	}
 
-	if err := service.doesShortUrlExistsForCurrentUser(newUrl.ShortUrl, userId); err != nil {
+	if err := service.doesShortUrlExists(newUrl.ShortUrl); err != nil {
 		return err
 	}
 
@@ -379,8 +379,8 @@ func (service *UrlService) doesLongUrlExistsForCurrentUser(longUrl string, userI
 	return nil
 }
 
-func (service *UrlService) doesShortUrlExistsForCurrentUser(shortUrl string, userId uuid.UUID) error {
-	exists, _ := repository.DoesShortUrlExist(service.db, shortUrl, userId, url.Url{},
+func (service *UrlService) doesShortUrlExists(shortUrl string) error {
+	exists, _ := repository.DoesShortUrlExist(service.db, shortUrl, url.Url{},
 		repository.Filter("short_url = ?", shortUrl))
 	if exists {
 		return errors.NewValidationError("This Short URL is already registered, try another pattern")

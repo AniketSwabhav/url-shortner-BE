@@ -324,6 +324,10 @@ func (service *UserService) AddAmountToWalllet(userID uuid.UUID, userToAddMoney 
 
 	dbUser.Wallet += amount
 
+	if dbUser.Wallet > 1000000000.00 {
+		return errors.NewHTTPError("wallet balance must not exceed 1000000000.00", http.StatusInternalServerError)
+	}
+
 	if err := service.repository.UpdateWithMap(uow, &dbUser,
 		map[string]interface{}{
 			"wallet":     dbUser.Wallet,

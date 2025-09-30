@@ -219,7 +219,7 @@ func DoesLongUrlExist(db *gorm.DB, longUrl string, userIid uuid.UUID, out interf
 	return false, nil
 }
 
-func DoesShortUrlExist(db *gorm.DB, shortUrl string, userId uuid.UUID, out interface{}, queryProcessors ...QueryProcessor) (bool, error) {
+func DoesShortUrlExist(db *gorm.DB, shortUrl string, out interface{}, queryProcessors ...QueryProcessor) (bool, error) {
 	if shortUrl == "" {
 		return false, errors.NewNotFoundError("Short is URL not valid")
 	}
@@ -229,7 +229,7 @@ func DoesShortUrlExist(db *gorm.DB, shortUrl string, userId uuid.UUID, out inter
 	if err != nil {
 		return false, err
 	}
-	if err := db.Debug().Model(out).Where("short_url = ? AND user_id = ?", shortUrl, userId).Count(&count).Error; err != nil {
+	if err := db.Debug().Model(out).Where("short_url = ?", shortUrl).Count(&count).Error; err != nil {
 		return false, err
 	}
 	if count > 0 {

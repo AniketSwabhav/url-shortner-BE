@@ -16,7 +16,7 @@ type User struct {
 	PhoneNo     string                 `sql:"index" json:"phoneNo" example:"9700795509" gorm:"type:varchar(15)"`
 	IsAdmin     *bool                  `json:"isAdmin" gorm:"type:tinyint(1);default:false"`
 	IsActive    *bool                  `json:"isActive" gorm:"type:tinyint(1);default:true"`
-	Wallet      float32                `json:"wallet" gorm:"type:float"`
+	Wallet      float32                `json:"wallet" gorm:"type:decimal(10,2)"`
 	UrlCount    int                    `json:"urlCount" gorm:"type:int"`
 	Credentials *credential.Credential `json:"credential"`
 }
@@ -28,7 +28,7 @@ type UserDTO struct {
 	PhoneNo      string                     `sql:"index" json:"phoneNo" example:"9700795509" gorm:"type:varchar(15)"`
 	IsAdmin      *bool                      `json:"isAdmin" gorm:"type:tinyint(1);default:false"`
 	IsActive     *bool                      `json:"isActive" gorm:"type:tinyint(1);default:true"`
-	Wallet       float32                    `json:"wallet" gorm:"type:float"`
+	Wallet       float32                    `json:"wallet" gorm:"type:decimal(10,2)"`
 	UrlCount     int                        `json:"urlCount" gorm:"type:int"`
 	Credentials  *credential.CredentialDTO  `json:"credential" gorm:"foreignKey:UserId;"`
 	Url          []*url.UrlDTO              `json:"url" gorm:"foreignKey:userId"`
