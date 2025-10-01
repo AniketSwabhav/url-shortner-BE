@@ -63,12 +63,12 @@ func (service *UrlService) CreateUrl(userId uuid.UUID, urlOwner *user.User, newU
 
 	newUrl.UserID = foundUser.ID
 
-	newUrl.Visits = subscription.FreeVisits
+	newUrl.RemainingVisits = subscription.FreeVisits
 	if foundUser.UrlCount == 0 {
 		return errors.NewDatabaseError("maximum url creation limit is reached, purchase more for creating new url")
 	}
 	newUrl.UserID = foundUser.ID
-	newUrl.Visits = subscription.FreeVisits
+	newUrl.RemainingVisits = subscription.FreeVisits
 
 	// for {
 
@@ -135,14 +135,17 @@ func (service *UrlService) RedirectToUrl(urlToRedirect *url.Url) error {
 		return errors.NewDatabaseError("no short url matches the given short url")
 	}
 
-	if urlToRedirect.Visits == 0 {
+	if urlToRedirect.RemainingVisits == 0 {
 		uow.RollBack()
 		return errors.NewHTTPError("no. of visits reacheed it's limit, please renew the visits", http.StatusForbidden)
 	}
 
-	urlToRedirect.Visits--
+	urlToRedirect.RemainingVisits--
+	urlToRedirect.VisitCount++
 
-	if err := service.repository.UpdateWithMap(uow, urlToRedirect, map[string]interface{}{"visits": urlToRedirect.Visits}); err != nil {
+	if err := service.repository.UpdateWithMap(uow, urlToRedirect, map[string]interface{}{
+		"remainingVisits": urlToRedirect.RemainingVisits,
+		"visitCount":      urlToRedirect.VisitCount}); err != nil {
 		uow.RollBack()
 		return errors.NewDatabaseError("unable to update visits count")
 	}
@@ -156,9 +159,9 @@ func (service *UrlService) RenewUrlVisits(urlToRenew *url.Url) error {
 	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
 
-	if urlToRenew.Visits <= 0 {
-		return errors.NewValidationError("number of visits should be a positive integer")
-	}
+	// if urlToRenew.RemainingVisits <= 0 {
+	// 	return errors.NewValidationError("number of visits should be a positive integer")
+	// }
 
 	urlOwner := &user.User{}
 	if err := service.repository.GetRecordByID(uow, urlToRenew.UserID, urlOwner); err != nil {
@@ -179,7 +182,7 @@ func (service *UrlService) RenewUrlVisits(urlToRenew *url.Url) error {
 		return errors.NewDatabaseError("unable to fetch subscription details")
 	}
 
-	totalPriceToRenew := float32(urlToRenew.Visits) * subscription.ExtraVisitPrice
+	totalPriceToRenew := float32(urlToRenew.RemainingVisits) * subscription.ExtraVisitPrice
 
 	if urlOwner.Wallet < totalPriceToRenew {
 		return errors.NewValidationError("insufficient balance in wallet, please add money to wallet")
@@ -187,7 +190,7 @@ func (service *UrlService) RenewUrlVisits(urlToRenew *url.Url) error {
 
 	urlOwner.Wallet -= totalPriceToRenew
 
-	newVisitCount := existingUrl.Visits + urlToRenew.Visits
+	newVisitCount := existingUrl.RemainingVisits + urlToRenew.RemainingVisits
 
 	if err := service.repository.UpdateWithMap(uow, urlOwner, map[string]interface{}{
 		"wallet": urlOwner.Wallet,
@@ -197,8 +200,8 @@ func (service *UrlService) RenewUrlVisits(urlToRenew *url.Url) error {
 	}
 
 	if err := service.repository.UpdateWithMap(uow, existingUrl, map[string]interface{}{
-		"visits":     newVisitCount,
-		"updated_by": urlToRenew.UserID,
+		"remaining_visits": newVisitCount,
+		"updated_by":       urlToRenew.UserID,
 	}); err != nil {
 		uow.RollBack()
 		return errors.NewDatabaseError("unable to renew url visits")
@@ -206,7 +209,7 @@ func (service *UrlService) RenewUrlVisits(urlToRenew *url.Url) error {
 
 	// //transaction--------------------------------------------------------------------------------------------------
 	var transactionType = "VISITSRENEWAL"
-	var note = fmt.Sprintf("%d visits renewed for %0.2f per visit price", urlToRenew.Visits, subscription.ExtraVisitPrice)
+	var note = fmt.Sprintf("%d visits renewed for %0.2f per visit price", urlToRenew.RemainingVisits, subscription.ExtraVisitPrice)
 
 	if err := service.transactionservice.CreateTransaction(uow, urlOwner.ID, totalPriceToRenew, transactionType, note); err != nil {
 		uow.RollBack()

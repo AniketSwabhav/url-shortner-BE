@@ -18,7 +18,7 @@ type Credential struct {
 type CredentialDTO struct {
 	model.Base
 	Email    string    `json:"email" gorm:"unique;not null;type:varchar(36)"`
-	Password string    `json:"-" gorm:"not null;type:varchar(255)"`
+	Password string    `json:"password" gorm:"not null;type:varchar(255)"`
 	UserID   uuid.UUID `json:"userId" gorm:"not null;type:varchar(36)"`
 }
 

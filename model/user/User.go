@@ -14,6 +14,7 @@ type User struct {
 	FirstName   string                 `json:"firstName" example:"Ravi" gorm:"type:varchar(50)"`
 	LastName    string                 `json:"lastName" example:"Sharma" gorm:"type:varchar(50)"`
 	PhoneNo     string                 `sql:"index" json:"phoneNo" example:"9700795509" gorm:"type:varchar(15)"`
+	Email       string                 `json:"email" gorm:"not null;type:varchar(36)"`
 	IsAdmin     *bool                  `json:"isAdmin" gorm:"type:tinyint(1);default:false"`
 	IsActive    *bool                  `json:"isActive" gorm:"type:tinyint(1);default:true"`
 	Wallet      float32                `json:"wallet" gorm:"type:decimal(10,2)"`
@@ -26,6 +27,7 @@ type UserDTO struct {
 	FirstName    string                     `json:"firstName" example:"Ravi" gorm:"type:varchar(50)"`
 	LastName     string                     `json:"lastName" example:"Sharma" gorm:"type:varchar(50)"`
 	PhoneNo      string                     `sql:"index" json:"phoneNo" example:"9700795509" gorm:"type:varchar(15)"`
+	Email        string                     `json:"email" gorm:"not null;type:varchar(36)"`
 	IsAdmin      *bool                      `json:"isAdmin" gorm:"type:tinyint(1);default:false"`
 	IsActive     *bool                      `json:"isActive" gorm:"type:tinyint(1);default:true"`
 	Wallet       float32                    `json:"wallet" gorm:"type:decimal(10,2)"`
