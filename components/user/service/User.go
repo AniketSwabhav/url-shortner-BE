@@ -260,6 +260,12 @@ func (service *UserService) UpdateUser(targetUser *user.User) error {
 	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
 
+	targetUser.Credentials = &credential.Credential{}
+	if err := service.repository.GetRecord(uow, &targetUser.Credentials, repository.Filter("user_id = ?", targetUser.ID)); err != nil {
+		return errors.NewDatabaseError("unable to get credentials")
+	}
+	targetUser.Credentials.Email = targetUser.Email
+
 	if err := service.repository.Update(uow, targetUser, repository.Filter("id = ?", targetUser.ID)); err != nil {
 		return errors.NewDatabaseError("unable to update user")
 	}
