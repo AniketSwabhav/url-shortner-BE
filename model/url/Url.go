@@ -28,6 +28,12 @@ type UrlDTO struct {
 	UserID          uuid.UUID `json:"userId" gorm:"foreignkey:ID;type:char(36)"`
 }
 
+// ALTER TABLE urls
+// MODIFY short_url VARCHAR(255)
+// CHARACTER SET utf8mb4
+// COLLATE utf8mb4_bin;
+// Fire this query for byte-by-byte comparison
+
 func (*UrlDTO) TableName() string {
 	return "urls"
 }

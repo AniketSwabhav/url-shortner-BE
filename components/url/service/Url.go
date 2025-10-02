@@ -329,6 +329,14 @@ func (service *UrlService) UpdateUrl(targetUrl *url.Url) error {
 		return err
 	}
 
+	if err := service.doesLongUrlExistsForCurrentUser(targetUrl.LongUrl, targetUrl.UserID); err != nil {
+		return err
+	}
+
+	// if err := service.doesShortUrlExists(targetUrl.ShortUrl); err != nil {
+	// 	return err
+	// }
+
 	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
 
