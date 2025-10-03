@@ -200,7 +200,7 @@ func (service *UserService) GetAllUsers(allUsers *[]user.UserDTO, parser *web.Pa
 	defer uow.RollBack()
 
 	// repository.PreloadAssociations([]string{"Credentials", "Url", "Transactions"}),
-	queryProcessors = append(queryProcessors, repository.PreloadAssociations([]string{"Credentials"}),
+	queryProcessors = append(queryProcessors,
 		service.addSearchQueries(parser.Form),
 		repository.Paginate(limit, offset, totalCount))
 
@@ -260,7 +260,11 @@ func (service *UserService) UpdateUser(targetUser *user.User) error {
 	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
 
-	targetUser.UpdatedAt = time.Now()
+	targetUser.Credentials = &credential.Credential{}
+	if err := service.repository.GetRecord(uow, &targetUser.Credentials, repository.Filter("user_id = ?", targetUser.ID)); err != nil {
+		return errors.NewDatabaseError("unable to get credentials")
+	}
+	targetUser.Credentials.Email = targetUser.Email
 
 	if err := service.repository.Update(uow, targetUser, repository.Filter("id = ?", targetUser.ID)); err != nil {
 		return errors.NewDatabaseError("unable to update user")
