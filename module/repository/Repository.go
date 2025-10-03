@@ -16,6 +16,7 @@ type Repository interface {
 	// Save(uow *UnitOfWork, value interface{}) error
 	Update(uow *UnitOfWork, out interface{}, queryProcessors ...QueryProcessor) error
 	UpdateWithMap(uow *UnitOfWork, model interface{}, value map[string]interface{}, queryProcessors ...QueryProcessor) error
+	GetRaw(uow *UnitOfWork, out interface{}, queryProcessors ...QueryProcessor) error
 }
 
 type GormRepository struct{}
@@ -245,4 +246,21 @@ func (repository *GormRepository) Update(uow *UnitOfWork, out interface{}, query
 		return err
 	}
 	return db.Model(out).Update(out).Error
+}
+
+func RawQuery(sql string, values ...interface{}) QueryProcessor {
+	return func(db *gorm.DB, out interface{}) (*gorm.DB, error) {
+		db = db.Debug().Raw(sql, values...)
+		return db, db.Error
+	}
+}
+
+func (repository *GormRepository) GetRaw(uow *UnitOfWork, out interface{}, queryProcessors ...QueryProcessor) error {
+	db := uow.DB
+	dbProcessed, err := executeQueryProcessors(db, out, queryProcessors...)
+	if err != nil {
+		return err
+	}
+	// Use Scan (not Find) for raw query
+	return dbProcessed.Debug().Scan(out).Error
 }

@@ -55,6 +55,7 @@ func (userController *UserController) RegisterRoutes(router *mux.Router) {
 
 	adminguardedRouter.HandleFunc("/", userController.getAllUsers).Methods(http.MethodGet)
 	adminguardedRouter.HandleFunc("/monthwise-records", userController.getMonthWiseRecords).Methods(http.MethodGet)
+	adminguardedRouter.HandleFunc("/report", userController.getReportStats).Methods(http.MethodGet)
 	adminguardedRouter.HandleFunc("/{userId}", userController.deleteUserById).Methods(http.MethodDelete)
 	adminguardedRouter.HandleFunc("/{userId}/subcription", userController.getSubscription).Methods(http.MethodGet)
 	// adminguardedRouter.HandleFunc("/{userId}/all-user-transactions", userController.getAllUserTransactions).Methods(http.MethodGet)
@@ -524,4 +525,21 @@ func (controller *UserController) getMonthWiseRecords(w http.ResponseWriter, r *
 	}
 
 	web.RespondJSON(w, http.StatusOK, response)
+}
+
+func (c *UserController) getReportStats(w http.ResponseWriter, r *http.Request) {
+	yearStr := r.URL.Query().Get("year")
+	year, err := strconv.Atoi(yearStr)
+	if err != nil {
+		http.Error(w, "Invalid year", http.StatusBadRequest)
+		return
+	}
+
+	stats, err := c.UserService.GetReportStats(year)
+	if err != nil {
+		web.RespondErrorMessage(w, http.StatusInternalServerError, "Error fetching stats")
+		return
+	}
+
+	web.RespondJSON(w, http.StatusOK, stats)
 }
