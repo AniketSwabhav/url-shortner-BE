@@ -492,6 +492,8 @@ func (controller *UserController) getMonthWiseRecords(w http.ResponseWriter, r *
 		stats, err = controller.UserService.GetMonthlyStats("transactions", "created_at", year, "AND amount > 0")
 	case "total-revenue":
 		stats, err = controller.UserService.GetMonthlyRevenue(year)
+	case "paid-user":
+		stats, err = controller.UserService.GetMonthlyUniqueUserTransactions(year)
 	default:
 		http.Error(w, "Invalid value type", http.StatusBadRequest)
 		return

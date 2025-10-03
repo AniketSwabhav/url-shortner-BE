@@ -591,7 +591,7 @@ func (s *UserService) GetMonthlyStats(table string, column string, year int, ext
 	query := fmt.Sprintf(`
 		SELECT MONTH(%s) as month, COUNT(*) as value
 		FROM %s
-		WHERE YEAR(%s) = ? %s
+		WHERE YEAR(%s) = ? %s AND deleted_at IS NULL
 		GROUP BY MONTH(%s)
 		ORDER BY MONTH(%s)
 	`, column, table, column, extraFilter, column, column)
@@ -608,6 +608,19 @@ func (s *UserService) GetMonthlyRevenue(year int) ([]stats.MonthlyStat, error) {
 		FROM transactions
 		WHERE YEAR(created_at) = ?
 		 AND type In('URLRENEWAL','VISITSRENEWAL')
+		GROUP BY MONTH(created_at)
+		ORDER BY MONTH(created_at)
+	`
+	err := s.db.Raw(query, year).Scan(&stats).Error
+	return stats, err
+}
+
+func (s *UserService) GetMonthlyUniqueUserTransactions(year int) ([]stats.MonthlyStat, error) {
+	var stats []stats.MonthlyStat
+	query := `
+		SELECT MONTH(created_at) as month, COUNT(DISTINCT user_id) as value
+		FROM transactions
+		WHERE YEAR(created_at) = ? AND deleted_at IS NULL
 		GROUP BY MONTH(created_at)
 		ORDER BY MONTH(created_at)
 	`
@@ -699,6 +712,11 @@ func (s *UserService) GetReportStats(year int) ([]stats.ReportStats, error) {
 		return nil, err
 	}
 
+	PaidUser, err := s.GetMonthlyUniqueUserTransactions(year)
+	if err != nil {
+		return nil , err
+	}
+
 	// Combine results
 	statsMap := make(map[int]stats.ReportStats)
 	
@@ -747,6 +765,13 @@ func (s *UserService) GetReportStats(year int) ([]stats.ReportStats, error) {
 		if stat, exists := statsMap[rev.Month]; exists {
 			stat.TotalRevenue = rev.Value
 			statsMap[rev.Month] = stat
+		}
+	}
+
+	for _, pu := range PaidUser {
+		if stat, exists := statsMap[pu.Month]; exists {
+			stat.PaidUser = int(pu.Value)
+			statsMap[pu.Month] = stat
 		}
 	}
 
