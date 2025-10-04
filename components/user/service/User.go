@@ -257,14 +257,18 @@ func (service *UserService) UpdateUser(targetUser *user.User) error {
 		return err
 	}
 
+	// if err := service.doesEmailExists(targetUser.Email); err != nil {
+	// 	return err
+	// }
+
 	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
 
-	targetUser.Credentials = &credential.Credential{}
-	if err := service.repository.GetRecord(uow, &targetUser.Credentials, repository.Filter("user_id = ?", targetUser.ID)); err != nil {
-		return errors.NewDatabaseError("unable to get credentials")
-	}
-	targetUser.Credentials.Email = targetUser.Email
+	// targetUser.Credentials = &credential.Credential{}
+	// if err := service.repository.GetRecord(uow, &targetUser.Credentials, repository.Filter("user_id = ?", targetUser.ID)); err != nil {
+	// 	return errors.NewDatabaseError("unable to get credentials")
+	// }
+	// targetUser.Credentials.Email = targetUser.Email
 
 	if err := service.repository.Update(uow, targetUser, repository.Filter("id = ?", targetUser.ID)); err != nil {
 		return errors.NewDatabaseError("unable to update user")
@@ -587,7 +591,7 @@ func (s *UserService) GetMonthlyStats(table string, column string, year int, ext
 	query := fmt.Sprintf(`
 		SELECT MONTH(%s) as month, COUNT(*) as value
 		FROM %s
-		WHERE YEAR(%s) = ? %s
+		WHERE YEAR(%s) = ? %s AND deleted_at IS NULL
 		GROUP BY MONTH(%s)
 		ORDER BY MONTH(%s)
 	`, column, table, column, extraFilter, column, column)
@@ -609,6 +613,150 @@ func (s *UserService) GetMonthlyRevenue(year int) ([]stats.MonthlyStat, error) {
 	`
 	err := s.db.Raw(query, year).Scan(&stats).Error
 	return stats, err
+}
+
+// func (s *UserService) GetReportStats(year int) ([]stats.ReportStats, error) {
+
+// 	uow := repository.NewUnitOfWork(s.db, true)
+// 	defer uow.RollBack()
+
+
+// 	sql := `
+// 		SELECT
+// 	    MONTH(u.created_at) AS month,
+// 	    COUNT(DISTINCT u.id) AS new_users,
+// 	    COUNT(DISTINCT CASE WHEN u.is_active = 1 THEN u.id END) AS active_users,
+// 	    COUNT(DISTINCT ur.id) AS urls_generated,
+// 	    COUNT(DISTINCT t.id) AS urls_renewed,
+// 	    COALESCE(SUM(CASE WHEN t.type IN ('URLRENEWAL','VISITSRENEWAL') THEN t.amount ELSE 0 END), 0) AS total_revenue
+// 	FROM
+// 	    users u
+// 	LEFT JOIN urls ur ON MONTH(ur.created_at) = MONTH(u.created_at)
+// 	LEFT JOIN transactions t ON MONTH(t.created_at) = MONTH(u.created_at)
+// 	WHERE YEAR(u.created_at) = ?
+// 	GROUP BY MONTH(u.created_at)
+// 	ORDER BY MONTH(u.created_at);
+
+//     `
+
+// 	proc := repository.RawQuery(sql, year)
+
+// 	var result []stats.ReportStats
+
+// 	if err := s.repository.GetRaw(uow, &result, proc); err != nil {
+// 		return nil, err
+// 	}
+
+// 	// Fill missing months
+// 	m := make(map[int]stats.ReportStats)
+// 	for _, r := range result {
+// 		m[r.Month] = r
+// 	}
+
+// 	final := make([]stats.ReportStats, 0, 12)
+// 	for i := 1; i <= 12; i++ {
+// 		if r, ok := m[i]; ok {
+// 			final = append(final, r)
+// 		} else {
+// 			final = append(final, stats.ReportStats{
+// 				Month:         i,
+// 				NewUsers:      0,
+// 				ActiveUsers:   0,
+// 				UrlsGenerated: 0,
+// 				UrlsRenewed:   0,
+// 				TotalRevenue:  0,
+// 			})
+// 		}
+// 	}
+
+// 	return final, nil
+// }
+
+func (s *UserService) GetReportStats(year int) ([]stats.ReportStats, error) {
+	// Get stats from individual functions
+	newUsers, err := s.GetMonthlyStats("users", "created_at", year, "")
+	if err != nil {
+		return nil, err
+	}
+
+	activeUsers, err := s.GetMonthlyStats("users", "created_at", year, "AND is_active = 1")
+	if err != nil {
+		return nil, err
+	}
+
+	urlsGenerated, err := s.GetMonthlyStats("urls", "created_at", year, "")
+	if err != nil {
+		return nil, err
+	}
+
+	urlsRenewed, err := s.GetMonthlyStats("transactions", "created_at", year, "AND type IN ('URLRENEWAL','VISITSRENEWAL')")
+	if err != nil {
+		return nil, err
+	}
+
+	revenue, err := s.GetMonthlyRevenue(year)
+	if err != nil {
+		return nil, err
+	}
+
+	// Combine results
+	statsMap := make(map[int]stats.ReportStats)
+	
+	// Initialize all months
+	for i := 1; i <= 12; i++ {
+		statsMap[i] = stats.ReportStats{
+			Month:         i,
+			NewUsers:      0,
+			ActiveUsers:   0,
+			UrlsGenerated: 0,
+			UrlsRenewed:   0,
+			TotalRevenue:  0,
+		}
+	}
+
+	// Populate with actual data
+	for _, nu := range newUsers {
+		if stat, exists := statsMap[nu.Month]; exists {
+			stat.NewUsers = int(nu.Value)
+			statsMap[nu.Month] = stat
+		}
+	}
+
+	for _, au := range activeUsers {
+		if stat, exists := statsMap[au.Month]; exists {
+			stat.ActiveUsers = int(au.Value)
+			statsMap[au.Month] = stat
+		}
+	}
+
+	for _, ug := range urlsGenerated {
+		if stat, exists := statsMap[ug.Month]; exists {
+			stat.UrlsGenerated = int(ug.Value)
+			statsMap[ug.Month] = stat
+		}
+	}
+
+	for _, ur := range urlsRenewed {
+		if stat, exists := statsMap[ur.Month]; exists {
+			stat.UrlsRenewed = int(ur.Value)
+			statsMap[ur.Month] = stat
+		}
+	}
+
+	for _, rev := range revenue {
+		if stat, exists := statsMap[rev.Month]; exists {
+			stat.TotalRevenue = rev.Value
+			statsMap[rev.Month] = stat
+		}
+	}
+
+	// Convert to slice
+	final := make([]stats.ReportStats, 0, 12)
+	for i := 1; i <= 12; i++ {
+		final = append(final, statsMap[i])
+	}
+
+	return final, nil
 }
 
 // ---------------- Helpers ----------------
