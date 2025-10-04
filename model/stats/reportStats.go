@@ -7,4 +7,13 @@ type ReportStats struct {
 	UrlsGenerated int
 	UrlsRenewed   int
 	TotalRevenue  float64
+	PaidUser      int
+}
+
+
+type UserReportStats struct {
+	Month         int
+	MonthlySpending int 
+	UrlsRenewed   int
+	VisitsRenewed   int
 }

@@ -48,6 +48,7 @@ func (userController *UserController) RegisterRoutes(router *mux.Router) {
 	userguardedRouter.HandleFunc("/{userId}/wallet/withdraw", userController.withdrawAmountFromWallet).Methods(http.MethodPost)
 	userguardedRouter.HandleFunc("/{userId}/renew-urls", userController.renewUrlsByUserId).Methods(http.MethodPost)
 	userguardedRouter.HandleFunc("/{userId}/amount", userController.getwalletAmount).Methods(http.MethodGet)
+	userguardedRouter.HandleFunc("/{userId}/report", userController.getUserReportStats).Methods(http.MethodGet)
 
 	commonRouter.HandleFunc("/{userId}", userController.getUserByID).Methods(http.MethodGet)
 	commonRouter.HandleFunc("/{userId}/transactions", userController.getTransactionByUserId).Methods(http.MethodGet)
@@ -492,6 +493,8 @@ func (controller *UserController) getMonthWiseRecords(w http.ResponseWriter, r *
 		stats, err = controller.UserService.GetMonthlyStats("transactions", "created_at", year, "AND amount > 0")
 	case "total-revenue":
 		stats, err = controller.UserService.GetMonthlyRevenue(year)
+	case "paid-user":
+		stats, err = controller.UserService.GetMonthlyUniqueUserTransactions(year)
 	default:
 		http.Error(w, "Invalid value type", http.StatusBadRequest)
 		return
@@ -536,6 +539,33 @@ func (c *UserController) getReportStats(w http.ResponseWriter, r *http.Request) 
 	}
 
 	stats, err := c.UserService.GetReportStats(year)
+	if err != nil {
+		web.RespondErrorMessage(w, http.StatusInternalServerError, "Error fetching stats")
+		return
+	}
+
+	web.RespondJSON(w, http.StatusOK, stats)
+}
+
+func (c *UserController) getUserReportStats(w http.ResponseWriter, r *http.Request) {
+
+	parser := web.NewParser(r)
+
+	userIdFromReport, err := parser.GetUUID("userId")
+	if err != nil {
+		web.RespondError(w, errors.NewValidationError("Invalid user ID format"))
+		return
+	}
+
+
+	yearStr := r.URL.Query().Get("year")
+	year, err := strconv.Atoi(yearStr)
+	if err != nil {
+		http.Error(w, "Invalid year", http.StatusBadRequest)
+		return
+	}
+
+	stats, err := c.UserService.GetUserReportStats(userIdFromReport,year)
 	if err != nil {
 		web.RespondErrorMessage(w, http.StatusInternalServerError, "Error fetching stats")
 		return

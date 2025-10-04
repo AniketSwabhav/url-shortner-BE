@@ -346,7 +346,7 @@ func (service *UserService) AddAmountToWalllet(userID uuid.UUID, userToAddMoney 
 		return errors.NewDatabaseError("Failed to update wallet")
 	}
 
-	//transaction--------------------------------------------------------------------------------------------------
+	// transaction--------------------------------------------------------------------------------------------------
 	// var transactionType = "CREDIT"
 	// var note = fmt.Sprintf("%0.2f added in the wallet", amount)
 
@@ -355,7 +355,7 @@ func (service *UserService) AddAmountToWalllet(userID uuid.UUID, userToAddMoney 
 	// 	return errors.NewDatabaseError("unable to create transaction")
 	// }
 
-	uow.Commit()
+	// uow.Commit()
 	return nil
 }
 func (service *UserService) WithdrawMoneyFromWallet(userID uuid.UUID, userToWthdrawMoney *user.User) error {
@@ -407,7 +407,7 @@ func (service *UserService) WithdrawMoneyFromWallet(userID uuid.UUID, userToWthd
 	// 	return errors.NewDatabaseError("unable to create transaction")
 	// }
 
-	uow.Commit()
+	// uow.Commit()
 	return nil
 }
 
@@ -615,11 +615,23 @@ func (s *UserService) GetMonthlyRevenue(year int) ([]stats.MonthlyStat, error) {
 	return stats, err
 }
 
+func (s *UserService) GetMonthlyUniqueUserTransactions(year int) ([]stats.MonthlyStat, error) {
+	var stats []stats.MonthlyStat
+	query := `
+		SELECT MONTH(created_at) as month, COUNT(DISTINCT user_id) as value
+		FROM transactions
+		WHERE YEAR(created_at) = ? AND deleted_at IS NULL
+		GROUP BY MONTH(created_at)
+		ORDER BY MONTH(created_at)
+	`
+	err := s.db.Raw(query, year).Scan(&stats).Error
+	return stats, err
+}
+
 // func (s *UserService) GetReportStats(year int) ([]stats.ReportStats, error) {
 
 // 	uow := repository.NewUnitOfWork(s.db, true)
 // 	defer uow.RollBack()
-
 
 // 	sql := `
 // 		SELECT
@@ -699,9 +711,14 @@ func (s *UserService) GetReportStats(year int) ([]stats.ReportStats, error) {
 		return nil, err
 	}
 
+	PaidUser, err := s.GetMonthlyUniqueUserTransactions(year)
+	if err != nil {
+		return nil, err
+	}
+
 	// Combine results
 	statsMap := make(map[int]stats.ReportStats)
-	
+
 	// Initialize all months
 	for i := 1; i <= 12; i++ {
 		statsMap[i] = stats.ReportStats{
@@ -750,8 +767,116 @@ func (s *UserService) GetReportStats(year int) ([]stats.ReportStats, error) {
 		}
 	}
 
+	for _, pu := range PaidUser {
+		if stat, exists := statsMap[pu.Month]; exists {
+			stat.PaidUser = int(pu.Value)
+			statsMap[pu.Month] = stat
+		}
+	}
+
 	// Convert to slice
 	final := make([]stats.ReportStats, 0, 12)
+	for i := 1; i <= 12; i++ {
+		final = append(final, statsMap[i])
+	}
+
+	return final, nil
+}
+
+func (s *UserService) GetUserReportStats(userId uuid.UUID, year int) ([]stats.UserReportStats, error) {
+	if userId == uuid.Nil {
+		return nil, errors.NewValidationError("Invalid user ID")
+	}
+
+	// --- 1️⃣ Monthly Renewal Count for this user ---
+	var MonthlySpendingStats []stats.MonthlyStat
+	MonthlySpendingQuery := `
+SELECT 
+    MONTH(created_at) AS month, 
+    SUM(amount) AS value
+FROM transactions 
+WHERE user_id = ?
+  AND YEAR(created_at) = ?
+  AND type IN ('URLRENEWAL', 'VISITSRENEWAL')
+  AND deleted_at IS NULL
+GROUP BY MONTH(created_at)
+ORDER BY MONTH(created_at)
+	`
+	if err := s.db.Raw(MonthlySpendingQuery, userId, year).Scan(&MonthlySpendingStats).Error; err != nil {
+		return nil, errors.NewDatabaseError("Failed to fetch user renewal transactions")
+	}
+
+     	var renewalStats []stats.MonthlyStat
+	renewalQuery := `
+SELECT
+ MONTH(created_at) AS month, COUNT(*) AS value
+		FROM transactions
+		WHERE user_id = ?
+		  AND YEAR(created_at) = ?
+		  AND type IN ('URLRENEWAL')
+		GROUP BY MONTH(created_at)
+		ORDER BY MONTH(created_at)
+	`
+	if err := s.db.Raw(renewalQuery, userId, year).Scan(&renewalStats).Error; err != nil {
+		return nil, errors.NewDatabaseError("Failed to fetch user renewal transactions")
+	}
+
+
+
+
+	// --- 3 Monthly Total Visits (from urls table) ---
+	var visitStats []stats.MonthlyStat
+	visitQuery := `
+	SELECT
+ MONTH(created_at) AS month, COUNT(*) AS value
+		FROM transactions
+		WHERE user_id = ?
+		  AND YEAR(created_at) = ?
+		  AND type IN ( 'VISITSRENEWAL')
+		GROUP BY MONTH(created_at)
+		ORDER BY MONTH(created_at)
+	`
+	if err := s.db.Raw(visitQuery, userId, year).Scan(&visitStats).Error; err != nil {
+		return nil, errors.NewDatabaseError("Failed to fetch user visit stats")
+	}
+
+	// --- 3️⃣ Combine both results month-wise ---
+	statsMap := make(map[int]stats.UserReportStats)
+	for i := 1; i <= 12; i++ {
+		statsMap[i] = stats.UserReportStats{
+			Month:       i,
+			MonthlySpending:0,
+			UrlsRenewed: 0,
+			VisitsRenewed: 0,
+		}
+	}
+
+	// Add renewals
+	for _, r := range MonthlySpendingStats {
+		if stat, exists := statsMap[r.Month]; exists {
+			stat.MonthlySpending = int(r.Value)
+			statsMap[r.Month] = stat
+		}
+	}
+
+
+		for _, r := range renewalStats {
+		if stat, exists := statsMap[r.Month]; exists {
+			stat.UrlsRenewed = int(r.Value)
+			statsMap[r.Month] = stat
+		}
+	}
+
+	// Add visits
+	for _, v := range visitStats {
+		if stat, exists := statsMap[v.Month]; exists {
+			stat.VisitsRenewed = int(v.Value)
+			statsMap[v.Month] = stat
+		}
+	}
+
+	// --- 4️⃣ Convert map to slice in month order ---
+	final := make([]stats.UserReportStats, 0, 12)
 	for i := 1; i <= 12; i++ {
 		final = append(final, statsMap[i])
 	}
