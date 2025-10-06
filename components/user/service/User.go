@@ -40,9 +40,23 @@ func NewUserService(DB *gorm.DB, repo repository.Repository, txService *transact
 	}
 }
 
-func (service *UserService) CreateAdmin(newUser *user.User) error {
+func (service *UserService) CreateAdmin(newUser *user.User, userIdFromToken uuid.UUID) error {
+
+	if err := service.doesUserExist(userIdFromToken); err != nil {
+		return err
+	}
+
 	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
+
+	tempUser := user.User{}
+	if err := service.repository.GetRecordByID(uow, userIdFromToken, &tempUser); err != nil {
+		return errors.NewDatabaseError("unable to get user record")
+	}
+
+	if !*tempUser.IsActive {
+		return errors.NewValidationError("Inactive Admin cannot perform action")
+	}
 
 	if err := service.doesEmailExists(newUser.Credentials.Email); err != nil {
 		return err
@@ -164,6 +178,11 @@ func (service *UserService) Login(userCredential *credential.Credential, claim *
 }
 
 func (service *UserService) GetUserByID(targetUser *user.UserDTO, tokenUserId uuid.UUID) error {
+
+	if err := service.doesUserExist(tokenUserId); err != nil {
+		return err
+	}
+
 	uow := repository.NewUnitOfWork(service.db, true)
 	defer uow.RollBack()
 
@@ -172,6 +191,10 @@ func (service *UserService) GetUserByID(targetUser *user.UserDTO, tokenUserId uu
 	if err := service.repository.GetRecordByID(uow, tokenUserId, &requestingUser); err != nil {
 		return errors.NewUnauthorizedError("invalid user making the request")
 	}
+
+	// if !*requestingUser.IsActive {
+	// 	return errors.NewValidationError("")
+	// }
 
 	// Step 2: Access control logic
 	isAdmin := requestingUser.IsAdmin != nil && *requestingUser.IsAdmin
@@ -192,17 +215,32 @@ func (service *UserService) GetUserByID(targetUser *user.UserDTO, tokenUserId uu
 	return nil
 }
 
-func (service *UserService) GetAllUsers(allUsers *[]user.UserDTO, parser *web.Parser, totalCount *int) error {
+func (service *UserService) GetAllUsers(allUsers *[]user.UserDTO, parser *web.Parser, totalCount *int, userIdFromToken uuid.UUID) error {
+
+	if err := service.doesUserExist(userIdFromToken); err != nil {
+		return err
+	}
+
 	var queryProcessors []repository.QueryProcessor
 	limit, offset := parser.ParseLimitAndOffset()
 
 	uow := repository.NewUnitOfWork(service.db, true)
 	defer uow.RollBack()
 
-	// repository.PreloadAssociations([]string{"Credentials", "Url", "Transactions"}),
+	tempUser := user.User{}
+	if err := service.repository.GetRecordByID(uow, userIdFromToken, &tempUser); err != nil {
+		return errors.NewDatabaseError("unable to get user record")
+	}
+
+	if !*tempUser.IsActive {
+		return errors.NewValidationError("Inactive Admin cannot see user List")
+	}
+
 	queryProcessors = append(queryProcessors,
 		service.addSearchQueries(parser.Form),
-		repository.Paginate(limit, offset, totalCount))
+		repository.Filter("`id`!=?", userIdFromToken),
+		repository.Paginate(limit, offset, totalCount),
+	)
 
 	err := service.repository.GetAll(uow, allUsers, queryProcessors...)
 	if err != nil {
@@ -213,26 +251,24 @@ func (service *UserService) GetAllUsers(allUsers *[]user.UserDTO, parser *web.Pa
 	return nil
 }
 
-// func (service *UserService) addSearchQueries(requestForm url.Values) repository.QueryProcessor {
+// func (service *UserService) addSearchQueries(requestForm url.Values, userIdFromToken uuid.UUID) repository.QueryProcessor {
+// 	searchTerm := requestForm.Get("search")
 
-// 	var queryProcessors []repository.QueryProcessor
+// 	return repository.QueryProcessor(func(db *gorm.DB, out interface{}) (*gorm.DB, error) {
+// 		like := "%" + searchTerm + "%"
 
-// 	if len(requestForm) == 0 {
-// 		return nil
-// 	}
+// 		query := db.Model(out).Where("users.id != ?", userIdFromToken)
 
-// 	// var columnNames []string
-// 	// var conditions []string
-// 	// var operators []string
-// 	// var values []interface{}
+// 		if searchTerm != "" {
+// 			query = query.Where(
+// 				db.Where("users.first_name LIKE ?", like).
+// 					Or("users.last_name LIKE ?", like).
+// 					Or("users.email LIKE ?", like),
+// 			)
+// 		}
 
-// 	// if _, ok := requestForm["firstName"]; ok {
-// 	// 	util.AddToSlice("`first_name`", "LIKE ?", "OR", "%"+requestForm.Get("firstName")+"%", &columnNames, &conditions, &operators, &values)
-// 	// }
-
-// 	queryProcessors = append(queryProcessors, repository.Filter("first_name LIKE (?)", "%"+requestForm.Get("firstName")+"%"))
-
-// 	return repository.CombineQueries(queryProcessors)
+// 		return query.Find(out), nil
+// 	})
 // }
 
 func (service *UserService) addSearchQueries(requestForm url.Values) repository.QueryProcessor {
@@ -244,31 +280,29 @@ func (service *UserService) addSearchQueries(requestForm url.Values) repository.
 	}
 
 	return repository.QueryProcessor(func(db *gorm.DB, out interface{}) (*gorm.DB, error) {
-		return db.Joins("JOIN credentials ON credentials.user_id = users.id").
-			Where("users.first_name LIKE ? OR users.last_name LIKE ? OR credentials.email LIKE ?",
-				"%"+searchTerm+"%", "%"+searchTerm+"%", "%"+searchTerm+"%").
+		return db.Where("users.first_name LIKE ? OR users.last_name LIKE ? OR users.email LIKE ?",
+			"%"+searchTerm+"%", "%"+searchTerm+"%", "%"+searchTerm+"%").
 			Find(out), nil
 	})
 }
 
-func (service *UserService) UpdateUser(targetUser *user.User) error {
+func (service *UserService) UpdateUser(targetUser *user.User, userIdFromToken uuid.UUID) error {
 
-	if err := service.doesUserExist(targetUser.ID); err != nil {
+	if err := service.doesUserExist(userIdFromToken); err != nil {
 		return err
 	}
-
-	// if err := service.doesEmailExists(targetUser.Email); err != nil {
-	// 	return err
-	// }
 
 	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
 
-	// targetUser.Credentials = &credential.Credential{}
-	// if err := service.repository.GetRecord(uow, &targetUser.Credentials, repository.Filter("user_id = ?", targetUser.ID)); err != nil {
-	// 	return errors.NewDatabaseError("unable to get credentials")
-	// }
-	// targetUser.Credentials.Email = targetUser.Email
+	tempUser := user.User{}
+	if err := service.repository.GetRecordByID(uow, userIdFromToken, &tempUser); err != nil {
+		return errors.NewDatabaseError("unable to get user record")
+	}
+
+	if !*tempUser.IsActive {
+		return errors.NewValidationError("Inactive user cannot perform update operation")
+	}
 
 	if err := service.repository.Update(uow, targetUser, repository.Filter("id = ?", targetUser.ID)); err != nil {
 		return errors.NewDatabaseError("unable to update user")
@@ -285,6 +319,15 @@ func (service *UserService) Delete(userID uuid.UUID, deletedBy uuid.UUID) error 
 
 	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
+
+	tempUser := user.User{}
+	if err := service.repository.GetRecordByID(uow, deletedBy, &tempUser); err != nil {
+		return errors.NewDatabaseError("unable to get user record")
+	}
+
+	if !*tempUser.IsActive {
+		return errors.NewValidationError("Inactive user cannot perform delete operation")
+	}
 
 	now := time.Now()
 
@@ -308,11 +351,7 @@ func (service *UserService) Delete(userID uuid.UUID, deletedBy uuid.UUID) error 
 
 func (service *UserService) AddAmountToWalllet(userID uuid.UUID, userToAddMoney *user.User) error {
 
-	if userToAddMoney.Wallet <= 0 {
-		return errors.NewValidationError("Credit Amount must be greater than zero")
-	}
-
-	if err := service.doesUserExist(userID); err != nil {
+	if err := service.doesUserExist(userToAddMoney.ID); err != nil {
 		return err
 	}
 
@@ -324,8 +363,16 @@ func (service *UserService) AddAmountToWalllet(userID uuid.UUID, userToAddMoney 
 		return errors.NewNotFoundError("User not found")
 	}
 
+	if !*dbUser.IsActive {
+		return errors.NewValidationError("Inactive users cannot add money")
+	}
+
 	if dbUser.ID != userToAddMoney.ID {
 		return errors.NewUnauthorizedError("you are not authorized to add amount to this wallet")
+	}
+
+	if userToAddMoney.Wallet <= 0 {
+		return errors.NewValidationError("Credit Amount must be greater than zero")
 	}
 
 	var amount = userToAddMoney.Wallet
@@ -360,6 +407,10 @@ func (service *UserService) AddAmountToWalllet(userID uuid.UUID, userToAddMoney 
 }
 func (service *UserService) WithdrawMoneyFromWallet(userID uuid.UUID, userToWthdrawMoney *user.User) error {
 
+	if err := service.doesUserExist(userToWthdrawMoney.ID); err != nil {
+		return err
+	}
+
 	if userToWthdrawMoney.Wallet <= 0 {
 		return errors.NewValidationError("Wihdraw amount must be greater than zero")
 	}
@@ -374,6 +425,10 @@ func (service *UserService) WithdrawMoneyFromWallet(userID uuid.UUID, userToWthd
 	var dbUser user.User
 	if err := service.repository.GetRecord(uow, &dbUser, repository.Filter("id = ?", userID)); err != nil {
 		return errors.NewNotFoundError("User not found")
+	}
+
+	if !*dbUser.IsActive {
+		return errors.NewValidationError("Inactive users cannot withdraw money")
 	}
 
 	if dbUser.ID != userToWthdrawMoney.ID {
@@ -452,7 +507,7 @@ func (service *UserService) WithdrawAmountFromWallet(userID uuid.UUID, amount fl
 
 func (service *UserService) GetAllTransactions(transactions *[]transaction.Transaction, totalCount *int, parser *web.Parser, userIdFromUrl, userIdFromToken uuid.UUID) error {
 
-	if err := service.doesUserExist(userIdFromUrl); err != nil {
+	if err := service.doesUserExist(userIdFromToken); err != nil {
 		return errors.NewDatabaseError("user not found with given id")
 	}
 
@@ -493,14 +548,18 @@ func (service *UserService) GetAllTransactions(transactions *[]transaction.Trans
 	return nil
 }
 
-func (service *UserService) GetWalletAmount(user *user.UserDTO) error {
+func (service *UserService) GetWalletAmount(user *user.UserDTO, userIdFromToken uuid.UUID) error {
 
-	if err := service.doesUserExist(user.ID); err != nil {
-		return errors.NewDatabaseError("user not found with given id")
+	if err := service.doesUserExist(userIdFromToken); err != nil {
+		return err
 	}
 
 	uow := repository.NewUnitOfWork(service.db, true)
 	defer uow.RollBack()
+
+	// if err := service.repository.GetRecordByID(uow, userIdFromToken, tempUser); err != nil {
+
+	// }
 
 	if err := service.repository.GetRecordByID(uow, user.ID, user); err != nil {
 		return errors.NewDatabaseError("Unable to fetch wallet amount for this user")
@@ -528,17 +587,26 @@ func (service *UserService) GetSubscription(subscriptions *[]subscription.Subscr
 
 func (service *UserService) RenewUrls(userToUpdate *user.User) error {
 
-	if err := service.doesUserExist(userToUpdate.ID); err != nil {
+	if err := service.doesUserExist(userToUpdate.UpdatedBy); err != nil {
 		return err
 	}
 
 	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
 
+	var dbUser user.User
+	if err := service.repository.GetRecord(uow, &dbUser, repository.Filter("id = ?", userToUpdate.UpdatedBy)); err != nil {
+		return errors.NewNotFoundError("User not found")
+	}
+
+	if !*dbUser.IsActive {
+		return errors.NewValidationError("Inactive users cannot renew urls")
+	}
+
 	if userToUpdate.UpdatedBy != userToUpdate.ID {
 		return errors.NewUnauthorizedError("you are not authorized to renew urls for this user")
 	}
-	// --1`
+
 	if userToUpdate.UrlCount <= 0 {
 		return errors.NewValidationError("number of url renews should be a positive integer")
 	}
@@ -585,7 +653,24 @@ func (service *UserService) RenewUrls(userToUpdate *user.User) error {
 	return nil
 }
 
-func (s *UserService) GetMonthlyStats(table string, column string, year int, extraFilter string) ([]stats.MonthlyStat, error) {
+func (service *UserService) GetMonthlyStats(userIdFromToken uuid.UUID, table string, column string, year int, extraFilter string) ([]stats.MonthlyStat, error) {
+
+	if err := service.doesUserExist(userIdFromToken); err != nil {
+		return nil, err
+	}
+
+	uow := repository.NewUnitOfWork(service.db, true)
+	defer uow.RollBack()
+
+	var dbUser user.User
+	if err := service.repository.GetRecord(uow, &dbUser, repository.Filter("id = ?", userIdFromToken)); err != nil {
+		return nil, errors.NewNotFoundError("User not found")
+	}
+
+	if !*dbUser.IsActive {
+		return nil, errors.NewUnauthorizedError("Inactive users cannot see montly stats")
+	}
+
 	var stats []stats.MonthlyStat
 
 	query := fmt.Sprintf(`
@@ -596,11 +681,28 @@ func (s *UserService) GetMonthlyStats(table string, column string, year int, ext
 		ORDER BY MONTH(%s)
 	`, column, table, column, extraFilter, column, column)
 
-	err := s.db.Raw(query, year).Scan(&stats).Error
+	err := service.db.Raw(query, year).Scan(&stats).Error
 	return stats, err
 }
 
-func (s *UserService) GetMonthlyRevenue(year int) ([]stats.MonthlyStat, error) {
+func (service *UserService) GetMonthlyRevenue(userIdFromToken uuid.UUID, year int) ([]stats.MonthlyStat, error) {
+
+	if err := service.doesUserExist(userIdFromToken); err != nil {
+		return nil, err
+	}
+
+	uow := repository.NewUnitOfWork(service.db, true)
+	defer uow.RollBack()
+
+	var dbUser user.User
+	if err := service.repository.GetRecord(uow, &dbUser, repository.Filter("id = ?", userIdFromToken)); err != nil {
+		return nil, errors.NewNotFoundError("User not found")
+	}
+
+	if !*dbUser.IsActive {
+		return nil, errors.NewUnauthorizedError("Inactive users cannot see monthly revenue")
+	}
+
 	var stats []stats.MonthlyStat
 
 	query := `
@@ -611,11 +713,28 @@ func (s *UserService) GetMonthlyRevenue(year int) ([]stats.MonthlyStat, error) {
 		GROUP BY MONTH(created_at)
 		ORDER BY MONTH(created_at)
 	`
-	err := s.db.Raw(query, year).Scan(&stats).Error
+	err := service.db.Raw(query, year).Scan(&stats).Error
 	return stats, err
 }
 
-func (s *UserService) GetMonthlyUniqueUserTransactions(year int) ([]stats.MonthlyStat, error) {
+func (service *UserService) GetMonthlyUniqueUserTransactions(userIdFromToken uuid.UUID, year int) ([]stats.MonthlyStat, error) {
+
+	if err := service.doesUserExist(userIdFromToken); err != nil {
+		return nil, err
+	}
+
+	uow := repository.NewUnitOfWork(service.db, true)
+	defer uow.RollBack()
+
+	var dbUser user.User
+	if err := service.repository.GetRecord(uow, &dbUser, repository.Filter("id = ?", userIdFromToken)); err != nil {
+		return nil, errors.NewNotFoundError("User not found")
+	}
+
+	if !*dbUser.IsActive {
+		return nil, errors.NewUnauthorizedError("Inactive users cannot see montly transactions")
+	}
+
 	var stats []stats.MonthlyStat
 	query := `
 		SELECT MONTH(created_at) as month, COUNT(DISTINCT user_id) as value
@@ -624,7 +743,7 @@ func (s *UserService) GetMonthlyUniqueUserTransactions(year int) ([]stats.Monthl
 		GROUP BY MONTH(created_at)
 		ORDER BY MONTH(created_at)
 	`
-	err := s.db.Raw(query, year).Scan(&stats).Error
+	err := service.db.Raw(query, year).Scan(&stats).Error
 	return stats, err
 }
 
@@ -684,34 +803,34 @@ func (s *UserService) GetMonthlyUniqueUserTransactions(year int) ([]stats.Monthl
 // 	return final, nil
 // }
 
-func (s *UserService) GetReportStats(year int) ([]stats.ReportStats, error) {
+func (s *UserService) GetReportStats(userIdFromToken uuid.UUID, year int) ([]stats.ReportStats, error) {
 	// Get stats from individual functions
-	newUsers, err := s.GetMonthlyStats("users", "created_at", year, "")
+	newUsers, err := s.GetMonthlyStats(userIdFromToken, "users", "created_at", year, "")
 	if err != nil {
 		return nil, err
 	}
 
-	activeUsers, err := s.GetMonthlyStats("users", "created_at", year, "AND is_active = 1")
+	activeUsers, err := s.GetMonthlyStats(userIdFromToken, "users", "created_at", year, "AND is_active = 1")
 	if err != nil {
 		return nil, err
 	}
 
-	urlsGenerated, err := s.GetMonthlyStats("urls", "created_at", year, "")
+	urlsGenerated, err := s.GetMonthlyStats(userIdFromToken, "urls", "created_at", year, "")
 	if err != nil {
 		return nil, err
 	}
 
-	urlsRenewed, err := s.GetMonthlyStats("transactions", "created_at", year, "AND type IN ('URLRENEWAL','VISITSRENEWAL')")
+	urlsRenewed, err := s.GetMonthlyStats(userIdFromToken, "transactions", "created_at", year, "AND type IN ('URLRENEWAL','VISITSRENEWAL')")
 	if err != nil {
 		return nil, err
 	}
 
-	revenue, err := s.GetMonthlyRevenue(year)
+	revenue, err := s.GetMonthlyRevenue(userIdFromToken, year)
 	if err != nil {
 		return nil, err
 	}
 
-	PaidUser, err := s.GetMonthlyUniqueUserTransactions(year)
+	PaidUser, err := s.GetMonthlyUniqueUserTransactions(userIdFromToken, year)
 	if err != nil {
 		return nil, err
 	}
@@ -783,7 +902,24 @@ func (s *UserService) GetReportStats(year int) ([]stats.ReportStats, error) {
 	return final, nil
 }
 
-func (s *UserService) GetUserReportStats(userId uuid.UUID, year int) ([]stats.UserReportStats, error) {
+func (service *UserService) GetUserReportStats(userId, userIdFromToken uuid.UUID, year int) ([]stats.UserReportStats, error) {
+
+	if err := service.doesUserExist(userIdFromToken); err != nil {
+		return nil, err
+	}
+
+	uow := repository.NewUnitOfWork(service.db, true)
+	defer uow.RollBack()
+
+	var dbUser user.User
+	if err := service.repository.GetRecord(uow, &dbUser, repository.Filter("id = ?", userIdFromToken)); err != nil {
+		return nil, errors.NewNotFoundError("User not found")
+	}
+
+	if !*dbUser.IsActive {
+		return nil, errors.NewValidationError("Inactive users cannot see report")
+	}
+
 	if userId == uuid.Nil {
 		return nil, errors.NewValidationError("Invalid user ID")
 	}
@@ -802,11 +938,11 @@ WHERE user_id = ?
 GROUP BY MONTH(created_at)
 ORDER BY MONTH(created_at)
 	`
-	if err := s.db.Raw(MonthlySpendingQuery, userId, year).Scan(&MonthlySpendingStats).Error; err != nil {
+	if err := service.db.Raw(MonthlySpendingQuery, userId, year).Scan(&MonthlySpendingStats).Error; err != nil {
 		return nil, errors.NewDatabaseError("Failed to fetch user renewal transactions")
 	}
 
-     	var renewalStats []stats.MonthlyStat
+	var renewalStats []stats.MonthlyStat
 	renewalQuery := `
 SELECT
  MONTH(created_at) AS month, COUNT(*) AS value
@@ -817,12 +953,9 @@ SELECT
 		GROUP BY MONTH(created_at)
 		ORDER BY MONTH(created_at)
 	`
-	if err := s.db.Raw(renewalQuery, userId, year).Scan(&renewalStats).Error; err != nil {
+	if err := service.db.Raw(renewalQuery, userId, year).Scan(&renewalStats).Error; err != nil {
 		return nil, errors.NewDatabaseError("Failed to fetch user renewal transactions")
 	}
-
-
-
 
 	// --- 3 Monthly Total Visits (from urls table) ---
 	var visitStats []stats.MonthlyStat
@@ -836,7 +969,7 @@ SELECT
 		GROUP BY MONTH(created_at)
 		ORDER BY MONTH(created_at)
 	`
-	if err := s.db.Raw(visitQuery, userId, year).Scan(&visitStats).Error; err != nil {
+	if err := service.db.Raw(visitQuery, userId, year).Scan(&visitStats).Error; err != nil {
 		return nil, errors.NewDatabaseError("Failed to fetch user visit stats")
 	}
 
@@ -844,10 +977,10 @@ SELECT
 	statsMap := make(map[int]stats.UserReportStats)
 	for i := 1; i <= 12; i++ {
 		statsMap[i] = stats.UserReportStats{
-			Month:       i,
-			MonthlySpending:0,
-			UrlsRenewed: 0,
-			VisitsRenewed: 0,
+			Month:           i,
+			MonthlySpending: 0,
+			UrlsRenewed:     0,
+			VisitsRenewed:   0,
 		}
 	}
 
@@ -859,8 +992,7 @@ SELECT
 		}
 	}
 
-
-		for _, r := range renewalStats {
+	for _, r := range renewalStats {
 		if stat, exists := statsMap[r.Month]; exists {
 			stat.UrlsRenewed = int(r.Value)
 			statsMap[r.Month] = stat
@@ -897,7 +1029,7 @@ func (service *UserService) doesEmailExists(email string) error {
 func (service *UserService) doesUserExist(ID uuid.UUID) error {
 	var u user.User
 	if err := service.db.First(&u, "id = ?", ID).Error; err != nil {
-		return errors.NewValidationError("User ID is invalid")
+		return errors.NewValidationError("user Doesn't exists")
 	}
 	return nil
 }

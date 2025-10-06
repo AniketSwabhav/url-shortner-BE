@@ -4,9 +4,11 @@ import (
 	"time"
 	"url-shortner-be/components/errors"
 	"url-shortner-be/model/subscription"
+	"url-shortner-be/model/user"
 	"url-shortner-be/module/repository"
 
 	"github.com/jinzhu/gorm"
+	uuid "github.com/satori/go.uuid"
 )
 
 type SubscriptionService struct {
@@ -21,7 +23,11 @@ func NewSubscriptionService(DB *gorm.DB, repo repository.Repository) *Subscripti
 	}
 }
 
-func (service *SubscriptionService) SetSubscriptionPrice(subscriptionPrices *subscription.Subscription) error {
+func (service *SubscriptionService) SetSubscriptionPrice(subscriptionPrices *subscription.Subscription, userIdFromToken uuid.UUID) error {
+
+	if err := service.doesUserExist(userIdFromToken); err != nil {
+		return err
+	}
 
 	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
@@ -46,7 +52,11 @@ func (service *SubscriptionService) SetSubscriptionPrice(subscriptionPrices *sub
 	return nil
 }
 
-func (service *SubscriptionService) GetPrice(latest *subscription.Subscription) error {
+func (service *SubscriptionService) GetPrice(latest *subscription.Subscription, userIdFromToken uuid.UUID) error {
+
+	if err := service.doesUserExist(userIdFromToken); err != nil {
+		return err
+	}
 
 	uow := repository.NewUnitOfWork(service.db, true)
 	defer uow.RollBack()
@@ -60,10 +70,23 @@ func (service *SubscriptionService) GetPrice(latest *subscription.Subscription) 
 	return nil
 }
 
-func (service *SubscriptionService) UpdateSubscriptionPrice(prices *subscription.Subscription) error {
+func (service *SubscriptionService) UpdateSubscriptionPrice(prices *subscription.Subscription, userIdFromToken uuid.UUID) error {
+
+	if err := service.doesUserExist(userIdFromToken); err != nil {
+		return err
+	}
 
 	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
+
+	tempUser := user.User{}
+	if err := service.repository.GetRecordByID(uow, userIdFromToken, &tempUser); err != nil {
+		return errors.NewDatabaseError("Unable to fetch Admin details")
+	}
+
+	if !*tempUser.IsActive {
+		return errors.NewUnauthorizedError("Inactive users cannot update subscription")
+	}
 
 	prices.UpdatedAt = time.Now()
 
@@ -72,5 +95,15 @@ func (service *SubscriptionService) UpdateSubscriptionPrice(prices *subscription
 	}
 
 	uow.Commit()
+	return nil
+}
+
+// ---------------- Helpers ----------------
+
+func (service *SubscriptionService) doesUserExist(ID uuid.UUID) error {
+	var u user.User
+	if err := service.db.First(&u, "id = ?", ID).Error; err != nil {
+		return errors.NewValidationError("Admin Doesn't exists")
+	}
 	return nil
 }

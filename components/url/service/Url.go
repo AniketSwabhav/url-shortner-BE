@@ -35,6 +35,22 @@ func NewUrlService(DB *gorm.DB, repo repository.Repository) *UrlService {
 
 func (service *UrlService) CreateUrl(userId uuid.UUID, urlOwner *user.User, newUrl *url.Url) error {
 
+	if err := service.doesUserExist(userId); err != nil {
+		return err
+	}
+
+	uow := repository.NewUnitOfWork(service.db, false)
+	defer uow.RollBack()
+
+	tempUser := user.User{}
+	if err := service.repository.GetRecordByID(uow, userId, &tempUser); err != nil {
+		return errors.NewDatabaseError("unable to get user record")
+	}
+
+	if !*tempUser.IsActive {
+		return errors.NewValidationError("Inactive user cannot create short url")
+	}
+
 	if err := service.doesLongUrlExistsForCurrentUser(newUrl.LongUrl, userId); err != nil {
 		return err
 	}
@@ -42,9 +58,6 @@ func (service *UrlService) CreateUrl(userId uuid.UUID, urlOwner *user.User, newU
 	if err := service.doesShortUrlExists(newUrl.ShortUrl); err != nil {
 		return err
 	}
-
-	uow := repository.NewUnitOfWork(service.db, false)
-	defer uow.RollBack()
 
 	foundUser := &user.User{}
 	if err := service.repository.GetRecord(uow, foundUser, repository.Filter("id = ?", userId)); err != nil {
@@ -156,6 +169,10 @@ func (service *UrlService) RedirectToUrl(urlToRedirect *url.Url) error {
 
 func (service *UrlService) RenewUrlVisits(urlToRenew *url.Url) error {
 
+	if err := service.doesUserExist(urlToRenew.UpdatedBy); err != nil {
+		return err
+	}
+
 	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
 
@@ -222,6 +239,10 @@ func (service *UrlService) RenewUrlVisits(urlToRenew *url.Url) error {
 
 func (service *UrlService) GetAllUrls(allUrl *[]url.UrlDTO, totalCount *int, parser *web.Parser, userIdFromUrl, userIdFromToken uuid.UUID) error {
 
+	if err := service.doesUserExist(userIdFromToken); err != nil {
+		return err
+	}
+
 	var queryProcessors []repository.QueryProcessor
 	limit, offset := parser.ParseLimitAndOffset()
 
@@ -236,6 +257,10 @@ func (service *UrlService) GetAllUrls(allUrl *[]url.UrlDTO, totalCount *int, par
 	tokenUser := user.User{}
 	if err := service.repository.GetRecordByID(uow, userIdFromToken, &tokenUser); err != nil {
 		return errors.NewUnauthorizedError("invalid user making the request")
+	}
+
+	if !*tokenUser.IsActive {
+		return errors.NewValidationError("inactive user cannot see urls")
 	}
 
 	isAdmin := tokenUser.IsAdmin != nil && *tokenUser.IsAdmin
@@ -296,6 +321,10 @@ func (service *UrlService) addSearchQueries(requestForm urlNet.Values) repositor
 
 func (service *UrlService) GetUrlByID(targetURL *url.UrlDTO) error {
 
+	if err := service.doesUserExist(targetURL.UserID); err != nil {
+		return err
+	}
+
 	if err := service.doesUrlExist(targetURL.ID); err != nil {
 		return err
 	}
@@ -312,6 +341,10 @@ func (service *UrlService) GetUrlByID(targetURL *url.UrlDTO) error {
 
 func (service *UrlService) GetUrlByShortUrl(originalUrl *url.UrlDTO) error {
 
+	if err := service.doesUserExist(originalUrl.UserID); err != nil {
+		return err
+	}
+
 	uow := repository.NewUnitOfWork(service.db, false)
 	defer uow.RollBack()
 
@@ -324,6 +357,10 @@ func (service *UrlService) GetUrlByShortUrl(originalUrl *url.UrlDTO) error {
 }
 
 func (service *UrlService) UpdateUrl(targetUrl *url.Url) error {
+
+	if err := service.doesUserExist(targetUrl.UserID); err != nil {
+		return err
+	}
 
 	if err := service.doesUrlExist(targetUrl.ID); err != nil {
 		return err
@@ -351,6 +388,11 @@ func (service *UrlService) UpdateUrl(targetUrl *url.Url) error {
 }
 
 func (service *UrlService) Delete(urlID uuid.UUID, deletedBy uuid.UUID) error {
+
+	if err := service.doesUserExist(deletedBy); err != nil {
+		return err
+	}
+
 	if err := service.doesUrlExist(urlID); err != nil {
 		return err
 	}
@@ -395,6 +437,16 @@ func (service *UrlService) doesShortUrlExists(shortUrl string) error {
 		repository.Filter("short_url = ?", shortUrl))
 	if exists {
 		return errors.NewValidationError("This Short URL is already registered, try another pattern")
+	}
+	return nil
+}
+
+// ---------------- Helpers ----------------
+
+func (service *UrlService) doesUserExist(ID uuid.UUID) error {
+	var u user.User
+	if err := service.db.First(&u, "id = ?", ID).Error; err != nil {
+		return errors.NewValidationError("user Doesn't exists")
 	}
 	return nil
 }

@@ -42,7 +42,7 @@ func (userController *UserController) RegisterRoutes(router *mux.Router) {
 
 	unguardedRouter.HandleFunc("/login", userController.login).Methods(http.MethodPost)
 	unguardedRouter.HandleFunc("/register-user", userController.registerUser).Methods(http.MethodPost)
-	unguardedRouter.HandleFunc("/register-admin", userController.registerAdmin).Methods(http.MethodPost)
+	adminguardedRouter.HandleFunc("/register-admin", userController.registerAdmin).Methods(http.MethodPost)
 
 	userguardedRouter.HandleFunc("/{userId}/wallet/add", userController.addAmountToWallet).Methods(http.MethodPost)
 	userguardedRouter.HandleFunc("/{userId}/wallet/withdraw", userController.withdrawAmountFromWallet).Methods(http.MethodPost)
@@ -82,7 +82,14 @@ func (controller *UserController) registerAdmin(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if err = controller.UserService.CreateAdmin(&newAdmin); err != nil {
+	userIdFromToken, err := security.ExtractUserIDFromToken(r)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
+	if err = controller.UserService.CreateAdmin(&newAdmin, userIdFromToken); err != nil {
 		web.RespondError(w, err)
 		return
 	}
@@ -199,12 +206,7 @@ func (controller *UserController) updateUserById(w http.ResponseWriter, r *http.
 	}
 	targetUser.UpdatedBy = userIdFromToken
 
-	// if userIdFromURL != userIdFromToken {
-	// 	web.RespondError(w, errors.NewUnauthorizedError("you are not authorized to update the user"))
-	// 	return
-	// }
-
-	if err = controller.UserService.UpdateUser(targetUser); err != nil {
+	if err = controller.UserService.UpdateUser(targetUser, userIdFromToken); err != nil {
 		web.RespondError(w, err)
 		return
 	}
@@ -219,7 +221,14 @@ func (controller *UserController) getAllUsers(w http.ResponseWriter, r *http.Req
 	var totalCount int
 	parser := web.NewParser(r)
 
-	if err := controller.UserService.GetAllUsers(&allUsers, parser, &totalCount); err != nil {
+	userIdFromToken, err := security.ExtractUserIDFromToken(r)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
+	if err := controller.UserService.GetAllUsers(&allUsers, parser, &totalCount, userIdFromToken); err != nil {
 		controller.log.Print(err.Error())
 		web.RespondError(w, err)
 		return
@@ -383,7 +392,7 @@ func (controller *UserController) getwalletAmount(w http.ResponseWriter, r *http
 
 	user.ID = userIdFromURL
 
-	if err := controller.UserService.GetWalletAmount(&user); err != nil {
+	if err := controller.UserService.GetWalletAmount(&user, userIdFromToken); err != nil {
 		web.RespondError(w, err)
 		return
 	}
@@ -465,6 +474,13 @@ func (controller *UserController) getMonthWiseRecords(w http.ResponseWriter, r *
 	yearStr := query.Get("year")
 	monthStr := query.Get("month")
 
+	userIdFromToken, err := security.ExtractUserIDFromToken(r)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
 	// Validate year
 	year, err := strconv.Atoi(yearStr)
 	if err != nil {
@@ -484,24 +500,24 @@ func (controller *UserController) getMonthWiseRecords(w http.ResponseWriter, r *
 	var stats []stats.MonthlyStat
 	switch value {
 	case "new-users":
-		stats, err = controller.UserService.GetMonthlyStats("users", "created_at", year, "")
+		stats, err = controller.UserService.GetMonthlyStats(userIdFromToken, "users", "created_at", year, "")
 	case "active-users":
-		stats, err = controller.UserService.GetMonthlyStats("users", "created_at", year, "AND is_active = 1")
+		stats, err = controller.UserService.GetMonthlyStats(userIdFromToken, "users", "created_at", year, "AND is_active = 1")
 	case "urls-generated":
-		stats, err = controller.UserService.GetMonthlyStats("urls", "created_at", year, "")
+		stats, err = controller.UserService.GetMonthlyStats(userIdFromToken, "urls", "created_at", year, "")
 	case "urls-renewed":
-		stats, err = controller.UserService.GetMonthlyStats("transactions", "created_at", year, "AND amount > 0")
+		stats, err = controller.UserService.GetMonthlyStats(userIdFromToken, "transactions", "created_at", year, "AND amount > 0")
 	case "total-revenue":
-		stats, err = controller.UserService.GetMonthlyRevenue(year)
+		stats, err = controller.UserService.GetMonthlyRevenue(userIdFromToken, year)
 	case "paid-user":
-		stats, err = controller.UserService.GetMonthlyUniqueUserTransactions(year)
+		stats, err = controller.UserService.GetMonthlyUniqueUserTransactions(userIdFromToken, year)
 	default:
 		http.Error(w, "Invalid value type", http.StatusBadRequest)
 		return
 	}
 
 	if err != nil {
-		web.RespondErrorMessage(w, http.StatusInternalServerError, "Error fetching stats")
+		web.RespondErrorMessage(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -530,24 +546,32 @@ func (controller *UserController) getMonthWiseRecords(w http.ResponseWriter, r *
 	web.RespondJSON(w, http.StatusOK, response)
 }
 
-func (c *UserController) getReportStats(w http.ResponseWriter, r *http.Request) {
+func (controller *UserController) getReportStats(w http.ResponseWriter, r *http.Request) {
 	yearStr := r.URL.Query().Get("year")
+
+	userIdFromToken, err := security.ExtractUserIDFromToken(r)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
+
 	year, err := strconv.Atoi(yearStr)
 	if err != nil {
 		http.Error(w, "Invalid year", http.StatusBadRequest)
 		return
 	}
 
-	stats, err := c.UserService.GetReportStats(year)
+	stats, err := controller.UserService.GetReportStats(userIdFromToken, year)
 	if err != nil {
-		web.RespondErrorMessage(w, http.StatusInternalServerError, "Error fetching stats")
+		web.RespondErrorMessage(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	web.RespondJSON(w, http.StatusOK, stats)
 }
 
-func (c *UserController) getUserReportStats(w http.ResponseWriter, r *http.Request) {
+func (controller *UserController) getUserReportStats(w http.ResponseWriter, r *http.Request) {
 
 	parser := web.NewParser(r)
 
@@ -557,6 +581,12 @@ func (c *UserController) getUserReportStats(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	userIdFromToken, err := security.ExtractUserIDFromToken(r)
+	if err != nil {
+		controller.log.Error(err.Error())
+		web.RespondError(w, err)
+		return
+	}
 
 	yearStr := r.URL.Query().Get("year")
 	year, err := strconv.Atoi(yearStr)
@@ -565,9 +595,9 @@ func (c *UserController) getUserReportStats(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	stats, err := c.UserService.GetUserReportStats(userIdFromReport,year)
+	stats, err := controller.UserService.GetUserReportStats(userIdFromReport, userIdFromToken, year)
 	if err != nil {
-		web.RespondErrorMessage(w, http.StatusInternalServerError, "Error fetching stats")
+		web.RespondErrorMessage(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
