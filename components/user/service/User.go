@@ -405,6 +405,7 @@ func (service *UserService) AddAmountToWalllet(userID uuid.UUID, userToAddMoney 
 	// uow.Commit()
 	return nil
 }
+
 func (service *UserService) WithdrawMoneyFromWallet(userID uuid.UUID, userToWthdrawMoney *user.User) error {
 
 	if err := service.doesUserExist(userToWthdrawMoney.ID); err != nil {
