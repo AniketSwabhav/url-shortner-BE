@@ -402,7 +402,7 @@ func (service *UserService) AddAmountToWalllet(userID uuid.UUID, userToAddMoney 
 	// 	return errors.NewDatabaseError("unable to create transaction")
 	// }
 
-	// uow.Commit()
+	uow.Commit()
 	return nil
 }
 
@@ -463,7 +463,7 @@ func (service *UserService) WithdrawMoneyFromWallet(userID uuid.UUID, userToWthd
 	// 	return errors.NewDatabaseError("unable to create transaction")
 	// }
 
-	// uow.Commit()
+	uow.Commit()
 	return nil
 }
 
@@ -526,6 +526,10 @@ func (service *UserService) GetAllTransactions(transactions *[]transaction.Trans
 	tokenUser := user.User{}
 	if err := service.repository.GetRecordByID(uow, userIdFromToken, &tokenUser); err != nil {
 		return errors.NewUnauthorizedError("invalid user making the request")
+	}
+
+	if !*tokenUser.IsActive {
+		return errors.NewValidationError("Inactive users cannot withdraw money")
 	}
 
 	isAdmin := tokenUser.IsAdmin != nil && *tokenUser.IsAdmin
@@ -686,6 +690,41 @@ func (service *UserService) GetMonthlyStats(userIdFromToken uuid.UUID, table str
 	return stats, err
 }
 
+func (s *UserService) GetMonthlyRenewalCounts(userIdFromToken uuid.UUID, year int) ([]stats.MonthlyStat, error) {
+	if err := s.doesUserExist(userIdFromToken); err != nil {
+		return nil, err
+	}
+
+	uow := repository.NewUnitOfWork(s.db, true)
+	defer uow.RollBack()
+
+	var dbUser user.User
+	if err := s.repository.GetRecord(uow, &dbUser, repository.Filter("id = ?", userIdFromToken)); err != nil {
+		return nil, errors.NewNotFoundError("User not found")
+	}
+
+	if !*dbUser.IsActive {
+		return nil, errors.NewUnauthorizedError("Inactive users cannot see monthly stats")
+	}
+
+	var stats []stats.MonthlyStat
+
+	query := `
+	SELECT 
+		MONTH(created_at) AS month, 
+		SUM(CAST(SUBSTRING_INDEX(note, ' ', 1) AS UNSIGNED)) AS value
+	FROM transactions
+	WHERE YEAR(created_at) = ?
+	  AND type IN ('URLRENEWAL', 'VISITSRENEWAL')
+	  AND deleted_at IS NULL
+	GROUP BY MONTH(created_at)
+	ORDER BY MONTH(created_at)
+	`
+
+	err := s.db.Raw(query, year).Scan(&stats).Error
+	return stats, err
+}
+
 func (service *UserService) GetMonthlyRevenue(userIdFromToken uuid.UUID, year int) ([]stats.MonthlyStat, error) {
 
 	if err := service.doesUserExist(userIdFromToken); err != nil {
@@ -821,7 +860,12 @@ func (s *UserService) GetReportStats(userIdFromToken uuid.UUID, year int) ([]sta
 		return nil, err
 	}
 
-	urlsRenewed, err := s.GetMonthlyStats(userIdFromToken, "transactions", "created_at", year, "AND type IN ('URLRENEWAL','VISITSRENEWAL')")
+	// urlsRenewed, err := s.GetMonthlyStats(userIdFromToken, "transactions", "created_at", year, "AND type IN ('URLRENEWAL','VISITSRENEWAL')")
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	urlsRenewed, err := s.GetMonthlyRenewalCounts(userIdFromToken, year)
 	if err != nil {
 		return nil, err
 	}
@@ -925,7 +969,7 @@ func (service *UserService) GetUserReportStats(userId, userIdFromToken uuid.UUID
 		return nil, errors.NewValidationError("Invalid user ID")
 	}
 
-	// --- 1️⃣ Monthly Renewal Count for this user ---
+	// --- 1️⃣ Monthly Total Spending for renewals ---
 	var MonthlySpendingStats []stats.MonthlyStat
 	MonthlySpendingQuery := `
 SELECT 
@@ -938,40 +982,43 @@ WHERE user_id = ?
   AND deleted_at IS NULL
 GROUP BY MONTH(created_at)
 ORDER BY MONTH(created_at)
-	`
+`
 	if err := service.db.Raw(MonthlySpendingQuery, userId, year).Scan(&MonthlySpendingStats).Error; err != nil {
 		return nil, errors.NewDatabaseError("Failed to fetch user renewal transactions")
 	}
 
+	// --- 2️⃣ Actual URLs renewed ---
 	var renewalStats []stats.MonthlyStat
 	renewalQuery := `
 SELECT
- MONTH(created_at) AS month, COUNT(*) AS value
-		FROM transactions
-		WHERE user_id = ?
-		  AND YEAR(created_at) = ?
-		  AND type IN ('URLRENEWAL')
-		GROUP BY MONTH(created_at)
-		ORDER BY MONTH(created_at)
-	`
+  MONTH(created_at) AS month,
+  SUM(CAST(SUBSTRING_INDEX(note, ' ', 1) AS UNSIGNED)) AS value
+FROM transactions
+WHERE user_id = ?
+  AND YEAR(created_at) = ?
+  AND type = 'URLRENEWAL'
+GROUP BY MONTH(created_at)
+ORDER BY MONTH(created_at)
+`
 	if err := service.db.Raw(renewalQuery, userId, year).Scan(&renewalStats).Error; err != nil {
-		return nil, errors.NewDatabaseError("Failed to fetch user renewal transactions")
+		return nil, errors.NewDatabaseError("Failed to fetch URL renewal stats")
 	}
 
-	// --- 3 Monthly Total Visits (from urls table) ---
+	// --- 3️⃣ Actual Visits renewed ---
 	var visitStats []stats.MonthlyStat
 	visitQuery := `
-	SELECT
- MONTH(created_at) AS month, COUNT(*) AS value
-		FROM transactions
-		WHERE user_id = ?
-		  AND YEAR(created_at) = ?
-		  AND type IN ( 'VISITSRENEWAL')
-		GROUP BY MONTH(created_at)
-		ORDER BY MONTH(created_at)
-	`
+SELECT
+  MONTH(created_at) AS month,
+  SUM(CAST(SUBSTRING_INDEX(note, ' ', 1) AS UNSIGNED)) AS value
+FROM transactions
+WHERE user_id = ?
+  AND YEAR(created_at) = ?
+  AND type = 'VISITSRENEWAL'
+GROUP BY MONTH(created_at)
+ORDER BY MONTH(created_at)
+`
 	if err := service.db.Raw(visitQuery, userId, year).Scan(&visitStats).Error; err != nil {
-		return nil, errors.NewDatabaseError("Failed to fetch user visit stats")
+		return nil, errors.NewDatabaseError("Failed to fetch visits renewal stats")
 	}
 
 	// --- 3️⃣ Combine both results month-wise ---
